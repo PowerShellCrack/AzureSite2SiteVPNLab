@@ -1,0 +1,261 @@
+interfaces {
+    ethernet eth0 {
+        address 192.168.1.36/24
+        description Switch_External
+        duplex auto
+        hw-id 00:15:5d:01:0d:13
+        smp_affinity auto
+        speed auto
+    }
+    ethernet eth1 {
+        address 10.100.1.254/24
+        description Switch_10.100.1.x
+        duplex auto
+        hw-id 00:15:5d:01:0d:14
+        smp_affinity auto
+        speed auto
+    }
+    ethernet eth2 {
+        address 10.100.2.254/24
+        description Switch_10.100.2.x
+        duplex auto
+        hw-id 00:15:5d:01:0d:15
+        smp_affinity auto
+        speed auto
+    }
+    loopback lo {
+    }
+}
+nat {
+    source {
+        rule 100 {
+            outbound-interface eth0
+            source {
+                address 10.100.0.0/16
+            }
+            translation {
+                address masquerade
+            }
+        }
+    }
+}
+protocols {
+    bgp 65168 {
+        neighbor 10.10.200.62 {
+            ebgp-multihop 8
+            remote-as 65010
+            soft-reconfiguration {
+                inbound
+            }
+        }
+        neighbor 10.11.200.62 {
+            ebgp-multihop 8
+            remote-as 65011
+            soft-reconfiguration {
+                inbound
+            }
+        }
+        network 10.100.0.0/16 {
+        }
+    }
+    static {
+        route 0.0.0.0/0 {
+            next-hop 192.168.1.1 {
+            }
+        }
+        route 10.100.0.0/16 {
+            blackhole {
+            }
+        }
+    }
+}
+service {
+    dhcp-relay {
+        interface eth1
+        interface eth2
+        relay-options {
+            hop-count 10
+            max-size 576
+            relay-agents-packets discard
+        }
+        server 10.100.1.1
+    }
+    dns {
+        forwarding {
+            cache-size 0
+            listen-on eth1
+            listen-on eth2
+            name-server 192.168.1.1
+        }
+    }
+    ssh {
+        port 22
+    }
+}
+system {
+    config-management {
+        commit-revisions 20
+    }
+    console {
+        device ttyS0 {
+            speed 9600
+        }
+    }
+    domain-name dtlab.ltd
+    host-name vyos
+    login {
+        user vyos {
+            authentication {
+                encrypted-password ****************
+                plaintext-password ****************
+            }
+            level admin
+        }
+    }
+    ntp {
+        server 0.pool.ntp.org {
+        }
+        server 1.pool.ntp.org {
+        }
+        server 2.pool.ntp.org {
+        }
+    }
+    package {
+        auto-sync 1
+        repository community {
+            components main
+            distribution helium
+            password ****************
+            url http://packages.vyos.net/vyos
+            username ""
+        }
+    }
+    syslog {
+        global {
+            facility all {
+                level notice
+            }
+            facility protocols {
+                level debug
+            }
+        }
+    }
+    time-zone US/Eastern
+}
+vpn {
+    ipsec {
+        esp-group atazure {
+            compression disable
+            lifetime 3600
+            mode tunnel
+            pfs disable
+            proposal 1 {
+                encryption aes256
+                hash sha1
+            }
+        }
+        ike-group atazure-ike {
+            ikev2-reauth no
+            key-exchange ikev2
+            lifetime 10800
+            proposal 1 {
+                dh-group 2
+                encryption aes256
+                hash sha1
+            }
+        }
+        ipsec-interfaces {
+            interface eth0
+        }
+        nat-traversal enable
+        site-to-site {
+            peer 13.88.189.205 {
+                authentication {
+                    mode pre-shared-secret
+                    pre-shared-secret ****************
+                }
+                connection-type initiate
+                default-esp-group atazure
+                description "Azure VNet West Gateway"
+                ike-group atazure-ike
+                ikev2-reauth inherit
+                local-address 192.168.1.36
+                tunnel 1 {
+                    allow-nat-networks disable
+                    allow-public-networks disable
+                    local {
+                        prefix 10.100.0.0/16
+                    }
+                    remote {
+                        prefix 10.0.0.0/8
+                    }
+                }
+            }
+            peer 40.121.70.7 {
+                authentication {
+                    mode pre-shared-secret
+                    pre-shared-secret ****************
+                }
+                connection-type initiate
+                default-esp-group atazure
+                description "Azure VNet East Gateway"
+                ike-group atazure-ike
+                ikev2-reauth inherit
+                local-address 192.168.1.36
+                tunnel 1 {
+                    allow-nat-networks disable
+                    allow-public-networks disable
+                    local {
+                        ipsec-interfaces {
+                            interface eth0
+                        }
+                        nat-traversal enable
+                        site-to-site {
+                            peer 13.88.189.205 {
+                                authentication {
+                                    mode pre-shared-secret
+                                    pre-shared-secret ****************
+                                }
+                                connection-type initiate
+                                default-esp-group atazure
+                                description "Azure VNet West Gateway"
+                                ike-group atazure-ike
+                                ikev2-reauth inherit
+                                local-address 192.168.1.36
+                                tunnel 1 {
+                                    allow-nat-networks disable
+                                    allow-public-networks disable
+                                    local {
+                                        prefix 10.100.0.0/16
+                                    }
+                                    remote {
+                                        prefix 10.0.0.0/8
+                                    }
+                                }
+                            }
+                            peer 40.121.70.7 {
+                                authentication {
+                                    mode pre-shared-secret
+                                    pre-shared-secret ****************
+                                }
+                                connection-type initiate
+                                default-esp-group atazure
+                                description "Azure VNet East Gateway"
+                                ike-group atazure-ike
+                                ikev2-reauth inherit
+                                local-address 192.168.1.36
+                                tunnel 1 {
+                                    allow-nat-networks disable
+                                    allow-public-networks disable
+                                    local {
+                                        prefix 10.100.0.0/16
+                                    }
+                                    remote {
+                                        prefix 10.0.0.0/8
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
