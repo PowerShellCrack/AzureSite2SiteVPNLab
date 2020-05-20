@@ -52,10 +52,10 @@ Also All logs written a transcript to the logs folder. Just in case you need to 
  - _Option 2_: Sets up a more complex Azre S2S VPN with hub and spoke design.
 			Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
 			
- - _Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the two
-	Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
-		**Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
-		**Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
+ - _Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts: 
+	1. **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
+	2. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
+	3. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
 	
 ## Azure VM
  - The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
@@ -63,8 +63,9 @@ Also All logs written a transcript to the logs folder. Just in case you need to 
 To setup a VM, run the script correspondign to the type of Azure VPN you set up:
  - For _Option 1_ Run script: **Step 4A. Build Azure VM.ps1**
  - For _Option 2_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
- - For _Option 3_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
-		**Step 4B-2. Build Azure VM - Region 2.ps1**
+ - For _Option 3_ Run scripts: 
+ 	1. **Step 4B-1. Build Azure VM - Region 1.ps1**
+	2. **Step 4B-2. Build Azure VM - Region 2.ps1**
 									   
 									   
 If all went well, you VM will connect to each other.
