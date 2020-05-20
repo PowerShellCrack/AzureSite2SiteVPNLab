@@ -9,7 +9,7 @@
    - ssh utility such as putty or git
  
 ## Scripts:
-    - NOTE: To run each script be sure to either run them with elevated rights.
+    - NOTE: To run each script be sure to run them with elevated rights.
     
     - Be sure to look through the hashtable san dchange anything you feel is necassary. 
 	**configs.ps1** <-- Used to answer script values; linked to all scripts
@@ -23,8 +23,8 @@
 			ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
 			TimeZone = 'US/Eastern'
 			LocationName = 'East US 2'
-			LocalAdminUser = "myAdmin"
-			LocalAdminPassword = '!QAZ1qaz!QAZ!qaz'
+			LocalAdminUser = ''
+			LocalAdminPassword = ''
 			ShutdownTimeZone = 'Eastern Standard Time'
 			ShutdownTime = '21:00'
 			
@@ -34,27 +34,28 @@
 	Also All logs write a transcript to the logs folder. Just in case you need to torubleshoot powershell errors. 
 
 ## Hyper-V Lab
-	- Install Hyper-V using script: **Step 1. Setup HyperV Lab.ps1**
-	- This lab uses a virtual router named VyOS. The ISO can be found here:
+ - Install Hyper-V using script: **Step 1. Setup HyperV Lab.ps1**
+ - This lab uses a virtual router named VyOS. The ISO can be found here:
 	https://downloads.vyos.io/?dir=release/legacy/1.1.8/VyOS-1.1.8-amd64.iso
-	- You can use the script to load the vYOS router as long as you change the location to your ISO:
-			ISOLocation = *'D:\ISOs\VyOS-1.1.8-amd64.iso'*
-		- run script: **Step 2. Setup Vyos Router in Lab.ps1**
-			The steps for the vyos will be manual. You will be prompted to make configurations to the router. Also once SSH is established, at the end, you will be presented with a copy/paste configurations. 
+ - You can use the script to load the vYOS router as long as you change the location to your ISO:
+	ISOLocation = *'D:\ISOs\VyOS-1.1.8-amd64.iso'*
+ - run script: **Step 2. Setup Vyos Router in Lab.ps1**
+	The steps for the vyos will be manual. You will be prompted to make configurations to the router. Also once SSH is established, at the end, you will be presented with a copy/paste configurations. 
 			
 
 ## Azure VPN Lab
-	- There are few options when building the Azure lab.
-		_Option 1_: Sets up a very basic azure S2S VPN , no hub or spoke configurations. 
+ - There are few options when building the Azure lab.
+
+_Option 1_: Sets up a very basic azure S2S VPN , no hub or spoke configurations. 
 			Run script: **Step 3A. Build Azure Basic S2S.ps1**
 	
-		_Option 2_: Sets up a more complex Azre S2S VPN with hub and spoke design.
+_Option 2_: Sets up a more complex Azre S2S VPN with hub and spoke design.
 			Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
 			
-		_Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the two
-			Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
-						**Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
-						**Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
+_Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the two
+	Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
+		**Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
+		**Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
 	
 ## Azure VM
 	- The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
