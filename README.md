@@ -9,12 +9,12 @@
    - ssh utility such as putty or git
  
 ## Scripts:
-    - NOTE: To run each script be sure to run them with elevated rights.
+**NOTE:** To run each script be sure to run them with elevated rights.
     
-    - Be sure to look through the hashtable san dchange anything you feel is necassary. 
+ - Be sure to look through the hashtable san dchange anything you feel is necassary. 
 	**configs.ps1** <-- Used to answer script values; linked to all scripts
-		- All the script use this as an answer file for each of the setup. The answers are loaded in hashtable format
-		- There are few things you should change or varify the values:
+	- All the script use this as an answer file for each of the setup. The answers are loaded in hashtable format
+	- There are few things you should change or varify the values:
 			$domain = 'fqdn'
 			$LabPrefix = 'domain'
 			$UseBGP = $false
@@ -28,10 +28,10 @@
 			ShutdownTimeZone = 'Eastern Standard Time'
 			ShutdownTime = '21:00'
 			
-	**library.ps1** <-- Custom functions used to automate; linked to all scripts
-		- Don't change anythign in here unless you know what your are doing
+**library.ps1** <-- Custom functions used to automate; linked to all scripts
+	- Don't change anything in here unless you know what your are doing
 
-	Also All logs write a transcript to the logs folder. Just in case you need to torubleshoot powershell errors. 
+Also All logs written a transcript to the logs folder. Just in case you need to torubleshoot powershell errors. 
 
 ## Hyper-V Lab
  - Install Hyper-V using script: **Step 1. Setup HyperV Lab.ps1**
@@ -58,12 +58,13 @@ _Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the
 		**Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
 	
 ## Azure VM
-	- The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
-		To setup a VM, run the script correspondign to the type of Azure VPN you set up:
-			For _Option 1_ Run script: **Step 4A. Build Azure VM.ps1**
-			For _Option 2_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
-			For _Option 3_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
-									   **Step 4B-2. Build Azure VM - Region 2.ps1**
+ - The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
+
+To setup a VM, run the script correspondign to the type of Azure VPN you set up:
+	- For _Option 1_ Run script: **Step 4A. Build Azure VM.ps1**
+	- For _Option 2_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
+	- For _Option 3_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
+		**Step 4B-2. Build Azure VM - Region 2.ps1**
 									   
 									   
 If all went well, you VM will connect to each other.
