@@ -22,15 +22,15 @@
     $domain = '<domain FQDN>'
     $LabPrefix = '<domain Netbios>'
     $AzEmail = 'tenantemail@tenantname.com'
-    $AzSubscription = '<your subcription name>'
+    $AzSubscription = '<your subscription name>'
  ```
  
  ```json
     ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
     TimeZone = 'US/Eastern'
     LocationName = 'East US 2'
-    LocalAdminUser = ''
-    LocalAdminPassword = ''
+    LocalAdminUser = '<admin account>'
+    LocalAdminPassword = '<admin password>'
     ShutdownTimeZone = 'Eastern Standard Time'
     ShutdownTime = '21:00'
 ```
