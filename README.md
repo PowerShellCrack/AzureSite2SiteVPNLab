@@ -19,11 +19,10 @@
   - There are few things you should change or verify the values:
 
 ```powershell
-    $domain = 'fqdn'
-    $LabPrefix = 'domain'
-    $UseBGP = $false
-    $AzEmail = 'youralias@microsoft.com'
-    $AzSubscription = 'Visual Studio Enterprise'
+    $domain = '<domain FQDN>'
+    $LabPrefix = '<domain Netbios>'
+    $AzEmail = 'tenantemail@tenantname.com'
+    $AzSubscription = '<your subcription name>'
  ```
  
  ```json
