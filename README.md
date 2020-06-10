@@ -60,13 +60,13 @@
 
 ## Azure VPN Lab
 
-- There are few options when building the Azure lab.
+- There are few options when building the Azure lab. Your Options are:
 
-- _Option 1_: Sets up a very basic azure S2S VPN , no hub or spoke configurations. Run script: **Step 3A. Build Azure Basic S2S.ps1**
+  _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub or spoke configurations. 
 
-- _Option 2_: Sets up a more complex Azre S2S VPN with hub and spoke design. Run script: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
+  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azre S2S VPN with hub and spoke design. Run script: 
 
-- _Option 3_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts: 
+  _Option C_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts [in order]: 
 	1. **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
 	2. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
 	3. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
@@ -75,13 +75,17 @@
 
 The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
 
-To setup a VM, run the script corresponding to the type of Azure VPN you set up:
+To setup a VM, run the script corresponding to the type of Azure VPN you set up prior:
 
-- For _Option 1_ Run script: **Step 4A. Build Azure VM.ps1**
-- For _Option 2_ Run script: **Step 4B-1. Build Azure VM - Region 1.ps1**
-- For _Option 3_ Run scripts: 
-    1. **Step 4B-1. Build Azure VM - Region 1.ps1**
-    2. **Step 4B-2. Build Azure VM - Region 2.ps1**
+
+  _Option 1_: **Step 4A. Build Azure VM.ps1**
+
+  _Option 2_: **Step 4B-1. Build Azure VM - Region 1.ps1**
+
+  _Option 3_ Run scripts:
+
+  1. **Step 4B-1. Build Azure VM - Region 1.ps1**
+  2. **Step 4B-2. Build Azure VM - Region 2.ps1**
 
 If all went well, you VM will connect to each other.
 
