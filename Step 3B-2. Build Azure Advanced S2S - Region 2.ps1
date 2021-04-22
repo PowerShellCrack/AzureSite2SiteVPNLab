@@ -37,7 +37,10 @@ If($UseBGP){
 #endregion
 
 # create a resource group
-New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+{
+    New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName
+}
 
 #region 1. Create virtual network A
 $vNetA = New-AzVirtualNetwork -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureAdvConfigSiteB.VnetHubName -AddressPrefix $AzureAdvConfigSiteB.VnetHubCIDRPrefix -Location $AzureAdvConfigSiteB.LocationName
@@ -54,6 +57,8 @@ Set-AzVirtualNetwork -VirtualNetwork $vNetB
 #endregion
 
 #region 2. Build Peering between vnets
+$vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetHubName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
+$vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
 Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteB.VnetPeerNameAB -VirtualNetwork $vNetA -RemoteVirtualNetworkId $vNetB.Id
 Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteB.VnetPeerNameBA -VirtualNetwork $vNetB -RemoteVirtualNetworkId $vNetA.Id
@@ -80,7 +85,7 @@ If($UseBGP){
     $VNGBGPParams.add('EnableBgp',$false)
 }
 # This will take a while; typically about 30 minutes
-New-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteB.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard $VNGBGPParams
+New-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteB.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard @VNGBGPParams
 
 #fetch virtual network gateway
 $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteB.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName

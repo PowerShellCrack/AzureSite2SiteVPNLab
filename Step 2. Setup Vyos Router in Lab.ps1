@@ -89,8 +89,8 @@ VyOS@VyOS# commit
 VyOS@VyOS# save
 VyOS@VyOS# exit
 VyOS@VyOS:~$ show int
-TAKE NOTE OF IP
 "@
+write-host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
@@ -135,6 +135,14 @@ ForEach($net in $VyOSNetworks) {
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 Start-Sleep 10
 #endregion
+
+
+#NOT WORKING
+# Add NATS for each Network
+# Create External conenction (Not default switch)
+# Fix network switch
+# create UI
+
 
 
 #region Build VyOS Final Configuration Commands

@@ -11,14 +11,14 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 #https://docs.microsoft.com/en-us/powershell/module/az.compute/new-azvm?view=azps-2.8.0
 #Example 3: Create a VM from a marketplace image without a Public IP
 #region Create a resource group:
-if (!(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
     New-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName
 }
 #endregion
 
 #region Create Storage Account
 $storageName = ($RegionBName +'-' + $Global:randomChar).ToLower() -replace '[\W]', ''
-if (!(Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $storageName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+If(-Not(Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $storageName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
     #build random char for storage name
     $Global:randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
     $storageName = ($RegionBName +'-' + $Global:randomChar).ToLower() -replace '[\W]', ''
@@ -30,7 +30,7 @@ if (!(Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroup
 #grab Vnet for NSG and NIC configurations
 $VNET = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VNETSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 
-if (!($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteA.NSGName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteA.NSGName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
 
     $NSG = New-AzNetworkSecurityGroup -Name $AzureVMSiteA.NSGName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -Verbose
     $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound -Verbose | Set-AzNetworkSecurityGroup

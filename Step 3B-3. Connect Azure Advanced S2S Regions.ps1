@@ -23,4 +23,6 @@ If($UseBGP){
     $gateway1.BgpSettingsText
     $gateway2.BgpSettingsText
 }
+
+
 Stop-Transcript

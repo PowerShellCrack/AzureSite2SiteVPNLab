@@ -15,10 +15,9 @@ Else{
 #============================================
 # General Configurations - EDIT THIS
 #============================================
+$LabPrefix = '<lab name>' #identifier for names in lab
 
-
-$domain = 'contoso.com' #just a name for now (no DC install....yet)
-$LabPrefix = 'contoso' #identifier for names in lab
+$domain = '<lab fqdn>' #just a name for now (no DC install....yet)
 
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
@@ -29,18 +28,33 @@ $AzSubscription = $null
 $Subscription = Get-AzContext
 
 #this is used to configure default username and password on Azure VM's
-$VMAdminUser = 'xAdmin'
+$VMAdminUser = '<admin>'
 $VMAdminPassword = '<password>'
 
 
 #Build a log folder for transactions
 New-Item "$PSScriptRoot\Logs" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 
+# Home network Public IP
+# go to whatsmyip.com
+$HomePublicIP = Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
+
+#run if not no variable found in global
+#Make it a global varibale so it used for the entire session
+If(!$Global:sharedPSKKey){$Global:sharedPSKKey = New-SharedPSKey}
+#$sharedPSKKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
+
+#build random character set to ensure no duplication (mainly used for storage accounts)
+#Make it a global varibale so it used for the entire session
+If(!$Global:randomChar){
+    $Global:randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
+}
+#endregion
+
 #============================================
-# PRE-SETUP
+# AZURE CONNECTION
 #============================================
 #region connect to Azure if not already connected
-
 Try{
     If($null -eq $Subscription){
         $AzAccount = Connect-AzAccount -ErrorAction Stop
@@ -71,23 +85,13 @@ If($Subscription.Subscription.Name -ne $AzSubscription){
 Write-Host ("Using Account ID:   {0} " -f $Subscription.Account.Id) -ForegroundColor Green
 Write-host ("Using Subscription: {0} " -f $Subscription.Subscription.Name) -ForegroundColor Green
 
-
-# Home network Public IP
-# go to whatsmyip.com
-$HomePublicIP = Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
-
-#run if not no variable found in global
-#Make it a global varibale so it used for the entire session
-If(!$Global:sharedPSKKey){$Global:sharedPSKKey = New-SharedPSKey}
-#$sharedPSKKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
-
-#build random character set to ensure no duplication (mainly used for storage accounts)
-#Make it a global varibale so it used for the entire session
-If(!$Global:randomChar){
-    $Global:randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
+#used in step 5
+$AzureVnetToVnetPeering = @{
+    SiteASubscriptionID = 'cb673656-d089-4158-a27a-628bf324ce44'
+    SiteATenantID= '72f988bf-86f1-41af-91ab-2d7cd011db47'
+    SiteBSubscriptionID = '07b9b78b-95b9-4d20-96e4-049cce8d92fb'
+    SiteBTenantID = '2ec9dcf0-b109-434a-8bcd-238a3bf0c6b2'
 }
-#endregion
-
 #============================================
 # LAB CONFIGURATIONS
 #============================================
@@ -225,7 +229,7 @@ $AzureAdvConfigSiteA = @{
     VnetSpokeCIDRPrefix = '10.20.0.0/16'
     VnetSpokeSubnetName = "Spoke-Subnet"
     VnetSpokeSubnetAddressPrefix = '10.20.0.0/24'
-    
+
     VnetHubName = "$RegionAName-Hub-vNet"
     VnetHubCIDRPrefix = '10.10.0.0/16'
     VnetHubSubnetName = "Hub-Subnet"
@@ -238,25 +242,20 @@ $AzureAdvConfigSiteA = @{
     NSGGatewayName = "$RegionAName-GatewayNSG"
 
     StorageSku = "standard_lrs"
+
+    PublicIpAddressName = $RegionAName.Replace(" ",'').ToLower() + '-vngw-pip'
+
+    VnetPeerNameAB = ($RegionAName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
+    VnetPeerNameBA = ($RegionAName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
+
+    VnetGatewayName = ($RegionAName).Replace(" ",'').ToLower() + '-vngw'
+    LocalGatewayName = $RegionAName + '-' + '-gw'
+    VnetConnectionName = ('ConnectionTo-' + $RegionAName).Replace(" ",'')
+
+    TunnelDescription = ('Gateway to ' + $RegionAName + ' in Azure').Replace("-",' ')
+
+    StorageAccountName = ($RegionAName).Replace(" ",'').ToLower() + '-sa'
 }
-
-#Dynamic Properties [EDIT CAUTION]
-#build on Hashtable for dynamic properties
-$AzureAdvConfigSiteA += @{
-    PublicIpAddressName = ($AzureAdvConfigSiteA.LocationName).Replace(" ",'').ToLower() + '-pip'
-
-    VnetPeerNameAB = ($AzureAdvConfigSiteA.LocationName + 'VnetATo' + $AzureAdvConfigSiteA.LocationName + 'VnetB').Replace(" ",'')
-    VnetPeerNameBA = ($AzureAdvConfigSiteA.LocationName + 'VnetBTo' + $AzureAdvConfigSiteA.LocationName + 'VnetA').Replace(" ",'')
-
-    VnetGatewayName = ($AzureAdvConfigSiteA.LocationName).Replace(" ",'').ToLower() + '-vngw'
-    LocalGatewayName = $RegionAName + '-' + ($AzureAdvConfigSiteA.LocationName).Replace(" ",'') + '-gw'
-    VnetConnectionName = 'ConnectionTo-' + ($AzureAdvConfigSiteA.LocationName).Replace(" ",'')
-
-    TunnelDescription = 'Gateway To Azure ' + ($AzureAdvConfigSiteA.LocationName)
-
-    StorageAccountName = ($AzureAdvConfigSiteA.LocationName).Replace(" ",'').ToLower() + '-sa'
-}
-
 # Virtual Machine Configurations - Region 1
 #-------------------------------------------
 $AzureVMSiteA = @{
@@ -294,14 +293,14 @@ $RegionBName = "$($LabPrefix.Replace(" ",''))-SiteB"
 #Static Properties [EDIT ALLOWED]
 $AzureAdvConfigSiteB = @{
     LocationName = 'West US'
-    
+
     ResourceGroupName = "$RegionBName-rg"
 
     VnetSpokeName = "$RegionBName-Spoke-vNet"
     VnetSpokeCIDRPrefix = '10.21.0.0/16'
     VnetSpokeSubnetName = "Spoke-Subnet"
     VnetSpokeSubnetAddressPrefix = '10.21.0.0/24'
-    
+
     VnetHubName = "$RegionBName-Hub-vNet"
     VnetHubCIDRPrefix = '10.11.0.0/16'
     VnetHubSubnetName = "Hub-Subnet"
@@ -314,23 +313,19 @@ $AzureAdvConfigSiteB = @{
     NSGGatewayName = "$RegionBName-GatewayNSG"
 
     StorageSku = "standard_lrs"
-}
 
-#Dynamic Properties [EDIT CAUTION]
-#build on Hashtable for dynamic properties
-$AzureAdvConfigSiteB += @{
-    PublicIpAddressName = ($AzureAdvConfigSiteB.LocationName).Replace(" ",'').ToLower() + '-pip'
+    PublicIpAddressName = $RegionBName.Replace(" ",'').ToLower() + '-vngw-pip'
 
-    VnetPeerNameAB = ($AzureAdvConfigSiteB.LocationName + 'VnetATo' + $AzureAdvConfigSiteB.LocationName + 'VnetB').Replace(" ",'')
-    VnetPeerNameBA = ($AzureAdvConfigSiteB.LocationName + 'VnetBTo' + $AzureAdvConfigSiteB.LocationName + 'VnetA').Replace(" ",'')
+    VnetPeerNameAB = ($RegionBName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
+    VnetPeerNameBA = ($RegionBName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
 
-    VnetGatewayName = ($AzureAdvConfigSiteB.LocationName).Replace(" ",'').ToLower() + '-vngw'
-    LocalGatewayName = $RegionBName + '-' + ($AzureAdvConfigSiteB.LocationName).Replace(" ",'') + '-gw'
-    VnetConnectionName = 'ConnectionTo-' + ($AzureAdvConfigSiteB.LocationName).Replace(" ",'')
+    VnetGatewayName = ($RegionBName).Replace(" ",'').ToLower() + '-vngw'
+    LocalGatewayName = $RegionBName + '-' + 'gw'
+    VnetConnectionName = ('ConnectionTo-' + $RegionBName).Replace(" ",'')
 
-    TunnelDescription = 'Gateway To Azure ' + ($AzureAdvConfigSiteB.LocationName)
+    TunnelDescription = ('Gateway to ' + $RegionBName + ' in Azure').Replace("-",' ')
 
-    StorageAccountName = ($AzureAdvConfigSiteB.LocationName).Replace(" ",'').ToLower() + '-sa'
+    StorageAccountName = ($RegionBName).Replace(" ",'').ToLower() + '-sa'
 }
 
 # Virtual Machine Configurations - Region 2
@@ -372,8 +367,8 @@ $AzureAdvConfigSiteAtoBConn= @{
     VNetGatewayName1=$AzureAdvConfigSiteA.VnetGatewayName
     VNetGatewayName2=$AzureAdvConfigSiteB.VnetGatewayName
 
-    Connection12  = $AzureAdvConfigSiteA.LocationName.Replace(" ",'').ToLower() + '-to-' + $AzureAdvConfigSiteB.LocationName.Replace(" ",'').ToLower() +'-conn'
-    Connection21  = $AzureAdvConfigSiteB.LocationName.Replace(" ",'').ToLower() + '-to-' + $AzureAdvConfigSiteA.LocationName.Replace(" ",'').ToLower() +'-conn'
+    Connection12  = $RegionAName + '-to-' + $RegionBName +'-conn'
+    Connection21  = $RegionBName.ToLower() + '-to-' + $RegionAName +'-conn'
 }
 
 #endregion

@@ -1,4 +1,4 @@
-# Hyper-V Lab Setup with Azure Site 2 Site VPN
+# Hybrid Lab Setup using Hyper-V and Azure Site-2-Site VPN
 
 ## Prereqs
 

@@ -1,3 +1,4 @@
+
 $ErrorActionPreference = "Stop"
 # https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
 # https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
@@ -36,7 +37,10 @@ If($UseBGP){
 #endregion
 
 # create a resource group
-New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
+{
+    New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName
+}
 
 #region 1. Create virtual network A
 $vNetA = New-AzVirtualNetwork -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.VnetHubName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
@@ -210,5 +214,23 @@ Write-Host $VyOScomand -ForegroundColor Gray
 
 Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in ssh session:`n" -ForegroundColor Yellow
 Write-Host "reboot now" -ForegroundColor Gray
+
+
+#make a conenction the VPN healthprobe
+add-type @"
+    using System.Net;
+    using System.Security.Cryptography.X509Certificates;
+    public class TrustAllCertsPolicy : ICertificatePolicy {
+        public bool CheckValidationResult(
+            ServicePoint srvPoint, X509Certificate certificate,
+            WebRequest request, int certificateProblem) {
+            return true;
+        }
+    }
+"@
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+
+$VPNGateway = Invoke-RestMethod "https://$($VyOSConfig.ExternalInterfaceIP):8081/healthprobe"
+$VPNGateway.string."#Text"
 
 Stop-Transcript
