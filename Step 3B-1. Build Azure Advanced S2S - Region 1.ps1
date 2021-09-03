@@ -9,27 +9,32 @@ $ErrorActionPreference = "Stop"
 $LogfileName = "$RegionAName-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
-#grab last address in subnets (for BGP)
-$Lastsubnet = $VyOSConfig.LocalSubnetPrefix | select -Last 1
-$subnet = $Lastsubnet.Split("/")[0]
-$mask = $Lastsubnet.Split("/")[1]
-$AddressesSpace = Get-NetworkStartEndAddress $subnet -Prefix $mask
-
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
-    $VyOSExtInterfaceIP = $VyOSConfig.ExternalInterfaceIP
+    $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
+}
+ElseIf(Test-Path "$env:temp\VyOSextipw.txt"){
+    $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
 }
 Else{
-    $VyOSExtInterfaceIP = Read-host "Whats the VyOS interface '$($VyOSConfig.ExternalInterface)' IP (eg. '192.168.1.36')"
-    #$VyOSExtInterfaceIP | Out-File "$env:temp\VyOSextip.txt" -Force
-    $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExtInterfaceIP)
+    $VyOSExternalIP = Read-host "Whats the VyOS interface '$($VyOSConfig.ExternalInterface)' IP (eg. '192.168.1.36')"
 }
+$VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
+
+#temporary set auto logon ssh keys
+New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
 #if using BGP; ask some questions
 If($UseBGP){
+    #grab last address in subnets (for BGP)
+    $Lastsubnet = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name | select -Last 1
+    $subnet = $Lastsubnet.name.Split("/")[0]
+    $mask = $Lastsubnet.name.Split("/")[1]
+    $AddressesSpace = Get-NetworkStartEndAddress $subnet -Prefix $mask
+
     $LocalNetworkASN = Read-host "What will be your local BGP ASN Number (range 64512 - 65534) [$($VyOSConfig.BgpAsn)]"
     If($LocalNetworkASN){$VyOSConfig['BGPAsn']=$LocalNetworkASN}
-    
+
     #Determin last address base don VyOS subnets
     $LocalPeerIP = Read-host "Whats is your last IP address in your VyOS routers subnet (Usually for the Bgp Peering Address) ['$($AddressesSpace.EndingIP)']"
     If($LocalPeerIP){$VyOSConfig['BgpPeeringAddress']=$LocalPeerIP}Else{$VyOSConfig['BgpPeeringAddress']=$AddressesSpace.EndingIP}
@@ -42,20 +47,25 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
     New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName
 }
 
-#region 1. Create virtual network A
-$vNetA = New-AzVirtualNetwork -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.VnetHubName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
-#Create a subnet configuration for the hub network or gateway subnet (Vnet A)
-Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix
-Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
-Set-AzVirtualNetwork -VirtualNetwork $vNetA
+If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
+{
+    #region 1. Create virtual network A
+    $vNetA = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
+    #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
+    Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix
+    Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
+    Set-AzVirtualNetwork -VirtualNetwork $vNetA
+}
 
-# Create virtual network B
-$vNetB = New-AzVirtualNetwork -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.VnetSpokeName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
-#Create a subnet configuration for first VM subnet (vnet B)
-Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
-Set-AzVirtualNetwork -VirtualNetwork $vNetB
-#endregion
-
+If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
+{
+    # Create virtual network B
+    $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
+    #Create a subnet configuration for first VM subnet (vnet B)
+    Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
+    Set-AzVirtualNetwork -VirtualNetwork $vNetB
+    #endregion
+}
 
 #region 2. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
@@ -64,13 +74,13 @@ Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameBA -VirtualNe
 
 
 #get vnet and gateway subnet
-$vNet = Get-AzVirtualNetwork -Name $vNetA.Name -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+$vNet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 $gwsubnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNet
 #endregion
 
 #region 3. Create Public IP
 New-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -AllocationMethod Dynamic
-$gwpip = Get-AzPublicIpAddress -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.PublicIpAddressName
+$gwpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 
 # get a public ip for the gateway
 $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name gwipconfig1 -SubnetId $gwsubnet.Id -PublicIpAddressId $gwpip.Id
@@ -111,7 +121,7 @@ New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionN
 
 $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 # get the BGP ip for local gw
-$azpip = (Get-AzPublicIpAddress -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name ($AzureAdvConfigSiteA.PublicIpAddressName)).IpAddress
+$azpip = (Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName).IpAddress
 If($UseBGP){$bgpsettings = $gateway1.BgpSettingsText | ConvertFrom-Json}
 
 #Ouput information need for local router
@@ -129,6 +139,7 @@ Write-Host ("Local Router Prefix:   {0}" -f $VyOSConfig.LocalCIDRPrefix)
 Write-Host ("Local Router External:   {0}" -f $VyOSConfig.LocalCIDRPrefix)
 Write-host ("Home Public IP:        {0}" -f $HomePublicIP)
 Write-Host "Be sure to follow a the configuration file 'VyOS_vpn_2site_bgp.md' in the VyOS_setup folder`n" -ForegroundColor Yellow
+
 
 $VyOScomand = @"
 # Enter configuration mode.
@@ -171,7 +182,7 @@ set vpn ipsec site-to-site peer $azpip default-esp-group 'azure'
 set vpn ipsec site-to-site peer $azpip description '$($AzureAdvConfigSiteA.TunnelDescription)'
 set vpn ipsec site-to-site peer $azpip ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $azpip ikev2-reauth 'inherit'
-set vpn ipsec site-to-site peer $azpip local-address '$($VyOSConfig.ExternalInterfaceIP)'
+set vpn ipsec site-to-site peer $azpip local-address '$VyOSExternalIP'
 set vpn ipsec site-to-site peer $azpip tunnel 1 allow-nat-networks 'disable'
 set vpn ipsec site-to-site peer $azpip tunnel 1 allow-public-networks 'disable'
 set vpn ipsec site-to-site peer $azpip tunnel 1 local prefix '$($VyOSConfig.LocalCIDRPrefix)'
@@ -195,28 +206,52 @@ $VyOScomand += @"
 
 commit
 save
-exit
-
-#check the IPsec tunnels are up:
-show vpn ipsec sa
-
 "@
 
+
+#build script for router
+#https://docs.vyos.io/en/crux/automation/command-scripting.html
+'#!/bin/vbash' | Set-Content $env:temp\vyos.script
+'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
+'' | Add-Content $env:temp\vyos.script
+$VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
+'exit' | Add-Content $env:temp\vyos.script
+'run restart vpn' | Add-Content $env:temp\vyos.script
+'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
+'' | Add-Content $env:temp\vyos.script
 If($UseBGP){
-    $VyOScomand += @"
-# Test if BGP is functioning, run the command:
-show ip bgp
-"@
+    'run show ip bgp' | Add-Content $env:temp\vyos.script
 }
+#'' | Add-Content $env:temp\vyos.script
+#'run reboot now' | Add-Content $env:temp\vyos.script
+#get-content $env:temp\vyos.script
 
-Write-Host "Copy and Paste below in ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-Write-Host $VyOScomand -ForegroundColor Gray
-
-Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in ssh session:`n" -ForegroundColor Yellow
-Write-Host "reboot now" -ForegroundColor Gray
+#copy script to vyos router
+$remoteSSHServerLogin = "vyos@$VyOSExternalIP"
+scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
 
 
-#make a conenction the VPN healthprobe
+$scriptfile = 'siteas2svpn.sh'
+#build bash command
+$bashCommands = @(
+    'mkdir -p ~/.scripts'
+    'chmod 700 ~/.scripts'
+    "rm -f ~/.scripts/$scriptfile"
+    "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
+    'rm -f ~/tmp.sh'
+    "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
+    "chmod u+x ~/.scripts/$scriptfile"
+    "sg vyattacfg -c ~/.scripts/$scriptfile"
+)
+#jooin all commands as single line separated with &&
+$bashCommand = $bashCommands -join ' && '
+ssh "vyos@$VyOSExternalIP" $bashCommand
+
+write-Host 
+Write-Host "vyos is rebooting...." -ForegroundColor Gray
+#endregion
+
+#make a connection the VPN health probe
 add-type @"
     using System.Net;
     using System.Security.Cryptography.X509Certificates;
@@ -230,7 +265,7 @@ add-type @"
 "@
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 
-$VPNGateway = Invoke-RestMethod "https://$($VyOSConfig.ExternalInterfaceIP):8081/healthprobe"
+$VPNGateway = Invoke-RestMethod "https://$($VyOSExternalIP):8081/healthprobe"
 $VPNGateway.string."#Text"
 
 Stop-Transcript

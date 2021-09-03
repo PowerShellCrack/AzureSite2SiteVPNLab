@@ -20,22 +20,25 @@ Else{
 }
 #endregion
 
+#Private Switches
+$HyperVSwitches = Get-VMSwitch
+
 #region Create External Switch
-If (((Get-VMSwitch -SwitchType External).Name) -eq $null) {New-VMSwitch -Name 'External' -NetAdapterName $FastestPhysicalAdapter -AllowManagementOS $true -Notes 'External Switch'}
+If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') ) {New-VMSwitch -Name 'External' -NetAdapterName $FastestPhysicalAdapter -AllowManagementOS $true -Notes 'External Switch'}
 $VmSwitchExternal = (Get-VMSwitch -SwitchType External).Name
 #endregion
 
-#Private Switches
-#$VmSwitchPrivate = (Get-VMSwitch -SwitchType Private).Name
+$i = 1
+#TEST $Subnet = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name |Select -first 1
 
-#region loop through hashtable and create networks
-Foreach($Key in $HyperVConfig.InternalNetworks.Keys){
-    $NetworkName = $HyperVConfig.InternalNetworks[$Key]
-    If($NetworkName -notin (Get-VMSwitch -SwitchType Private).Name){
-        New-VMSwitch -Name $NetworkName -SwitchType Private -Notes ("{0} VLAN: {1} for [{2}]" -f $Key,$NetworkName,$vYosConfig.NetPrefix)
+Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+    $NetworkName = ($vYosConfig.NetPrefix +' ' + $i + ' - ' + $Subnet.Name)
+    $Description = ("{2} for {1}: {0}" -f $Subnet.Name,$VyOSConfig.LocalSubnetPrefix[$Subnet.Name],$vYosConfig.NetPrefix)
+    If($NetworkName -notin ($HyperVSwitches | Where SwitchType -eq 'Private') ){
+        New-VMSwitch -Name $NetworkName -SwitchType Private -Notes $Description
     }
     Else{
-        Write-Host ("{0} Network already exists [{1}]. Skipping creation." -f $NetworkName,$Key) -ForegroundColor Yellow
+        Write-Host ("{0} Network already exists. Skipping creation." -f $NetworkName) -ForegroundColor Yellow
     }
+    $i++
 }
-#endregion

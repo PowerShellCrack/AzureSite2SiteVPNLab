@@ -1,3 +1,119 @@
+
+Function Connect-AzureEnvironment{
+    [CmdletBinding(DefaultParameterSetName = 'ListParameterSet',
+        HelpUri = 'https://go.microsoft.com/fwlink/?LinkID=398573',
+        SupportsShouldProcess = $true)]
+    Param(
+        [Parameter(Mandatory = $false,Position = 0)]
+        [string]$TenantID,
+
+        [Parameter(Mandatory = $false,
+            Position = 1,
+            ParameterSetName = 'NameParameterSet')]
+        [string]$SubscriptionName,
+
+        [Parameter(Mandatory = $false,
+            Position = 1,
+            ParameterSetName = 'IDParameterSet')]
+        [string]$SubscriptionID ,
+
+        [Parameter(Mandatory = $false,
+            Position = 2)]
+        [string]$ResourceGroupName,
+
+        [switch]$ClearAll
+    )
+    Begin{
+        ## Get the name of this function
+        [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+
+        if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+            $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
+        }
+
+        #overwrite global variable if specified
+        if ($PSBoundParameters.ContainsKey('TenantID')) {
+            $global:MyTenantID = $TenantID
+        }
+
+        if ($PSBoundParameters.ContainsKey('SubscriptionID')) {
+            $global:MySubscriptionID = $SubscriptionID
+        }
+
+        if ($PSBoundParameters.ContainsKey('SubscriptionName')) {
+            $global:MySubscriptionName = $SubscriptionName
+        }
+
+        #overwrite global resource group is parameter is called
+        if ($PSBoundParameters.ContainsKey('ResourceGroupName')) {
+            $global:MyResourceGroup = $ResourceGroupName
+        }
+
+        If($ClearAll){
+            Write-host ("There was an issue signing into Azure. Resetting and attempting again...") -ForegroundColor yellow
+            Clear-AzDefault -ErrorAction SilentlyContinue -Force
+            Clear-AzContext -ErrorAction SilentlyContinue -Force
+            Disconnect-AzAccount -ErrorAction SilentlyContinue
+        }
+        Else{
+            Try{
+                #grab current AZ resources
+                $Context = Get-AzContext -ErrorAction Stop
+                #if defualt is not set, attempt to set it
+                If($null -eq (Get-AzDefault) )
+                {
+                    $DefaultRG = Set-AzDefault -ResourceGroupName $global:MyResourceGroup -Force
+                }Else{
+                    $DefaultRG = Get-AzDefault -ErrorAction Stop
+                }
+            }Catch{
+                Write-host ("Failed to get Azure context. {0}" -f $_.Exception.Message) -ForegroundColor yellow
+            }
+        }
+
+        $MySubscriptions = @()
+        $MyRGs = @()
+
+        If($VerbosePreference){Write-Host ''}
+    }
+    Process{
+        If($VerbosePreference){Write-Host ("Attempting to connect to Azure...") -ForegroundColor Yellow -NoNewline}
+        #region connect to Azure if not already connected
+        Try{
+            If(($null -eq $Context.Subscription.SubscriptionId) -or ($null -eq $Context.Subscription.Name))
+            {
+                If($global:MyTenantID){
+                    $AzAccount = Connect-AzAccount -Tenant $global:MyTenantID -ErrorAction Stop
+                }Else{
+                    $AzAccount = Connect-AzAccount -ErrorAction Stop
+                }
+                Write-Host "You must select an Azure Subscription"
+                $AzSubscription += Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
+                Set-AzContext -Tenant $AzSubscription.Subscription.TenantId -Subscription $AzSubscription.Subscription.id | Out-Null
+                If($VerbosePreference){Write-Host ("Successfully connected to Azure!") -ForegroundColor Green}
+            }
+            Else{
+                If($VerbosePreference){Write-Host ("Already connected to Azure using account [{0}] and subscription [{1}]" -f $Context.Account.Id,$Context.Subscription.Name) -ForegroundColor Green}
+            }
+        }
+        Catch{
+            If($VerbosePreference){Write-Host ("Unable to connect to Azure account with credentials: {0}. Error: {1}" -f $AzAccount.Context.Account.Id, $_.Exception.Message) -ForegroundColor Red}
+            Break
+        }
+        Finally{
+            #To suppress these warning messages
+            Write-Verbose ("Suppressing Azure Powershell change warnings...")
+            Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+        }
+    }
+    End{
+        #once logged in, set defaults context
+        Get-AzContext
+    }
+
+}
+
+
 #grabbed from: https://gallery.technet.microsoft.com/scriptcenter/Enable-or-disable-auto-c7837c84
 #thanks to: Floris van der Ploeg
 Function Set-AzVMAutoShutdown{
@@ -84,7 +200,7 @@ Function Set-AzVMAutoShutdown{
     }
 
     # Validate the set timezone
-    if ((Get-TimeZone -ListAvailable | Select-Object -ExpandProperty Id) -notcontains $TimeZone) {
+    if ( (Get-TimeZone -ListAvailable | Select-Object -ExpandProperty Id) -notcontains $TimeZone) {
         Write-Error -Message "TimeZone $TimeZone is not valid"
         return
     }
@@ -194,7 +310,6 @@ Function Test-IPAddress ($strIP)
     Catch{
         $bValidIP = $false
     }
-	
 	Return $bValidIP
 }
 
@@ -225,7 +340,6 @@ Function ConvertTo-IPv4Binary ($strIP)
 				$strBinaryIP = $strBinaryIP+"."
 			}
 				$strBinaryIP = $strBinaryIP+(ConvertTo-Binary $section)
-			
 		}
 	}
 	Return $strBinaryIP
@@ -245,7 +359,6 @@ Function ConvertTo-IPv4MaskBinary ($strSubnetMask)
 				$strBinarySubnetMask = $strBinarySubnetMask+"."
 			}
 				$strBinarySubnetMask = $strBinarySubnetMask+(ConvertTo-Binary $section)
-			
 		}
 	}
 	Return $strBinarySubnetMask
@@ -323,7 +436,7 @@ Function Get-NetworkStartEndAddress{
         $BinarySubnetMask = (ConvertTo-IPv4MaskBinary $SubnetMask).replace(".", "")
 	    $BinaryNetworkAddressSection = $BinarySubnetMask.replace("1", "")
     }
-	
+
     $BinaryNetworkAddressLength = $BinaryNetworkAddressSection.length
 	$iAddressPool = $iAddressWidth -2
 	$BinaryIP = (ConvertTo-IPv4Binary $IPAddress).Replace(".", "")
@@ -333,11 +446,11 @@ Function Get-NetworkStartEndAddress{
 	#Starting IP
 	$FirstAddress = $BinaryNetworkAddressSection -replace "0$", "1"
 	$strFirstIP = ConvertFrom-IPv4Binary ($BinaryIPNetworkSection + $FirstAddress)
-	
+
 	#End IP
 	$LastAddress = ($BinaryNetworkAddressSection -replace "0", "1") -replace "1$", "0"
 	$strLastIP = ConvertFrom-IPv4Binary ($BinaryIPNetworkSection + $LastAddress)
-    
+
     #build NetworkInfo object
     $NetworkInfo = New-Object -TypeName PSObject
     Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name IPAddress -Value $IPAddress
@@ -345,7 +458,7 @@ Function Get-NetworkStartEndAddress{
     Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name StartingIP -Value $strFirstIP
     Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name EndingIP -Value $strLastIP
     Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name Prefix -Value $CIDR
-    
+
     return $NetworkInfo
 }
 
@@ -393,7 +506,7 @@ Function Get-TypicalIPRange {
                 #for gateway add 1
                 $Ip2[-1] = [int]$Ip2[-1] + 1
                 $GatewayIP = $ip2 -join '.'
-                
+
                 #for start add another (2)
                 $Ip2[-1] = [int]$Ip2[-1] + 1
                 $NewStartIP = $Ip2 -join '.'
@@ -407,7 +520,7 @@ Function Get-TypicalIPRange {
                 $GatewayIP = $StartIP
             }
             $NewEndIP =$EndIP
-            
+
          }
 
          'Last'  {
@@ -418,7 +531,6 @@ Function Get-TypicalIPRange {
             $GatewayIP = $EndIP
             $NewStartIP = $StartIP
             }
-            
 
         }
 
@@ -429,7 +541,7 @@ Function Get-TypicalIPRange {
         Add-Member -InputObject $GatewayInfo -MemberType NoteProperty -Name EndIP -Value $NewEndIP 
     }
     return $GatewayInfo
-    
+
 }
 
 Function Set-TruncateString{
@@ -441,7 +553,7 @@ Function Set-TruncateString{
     )
 
     process{
-        $str.subString(0, [System.Math]::Min($length, $str.Length)) 
+        $str.subString(0, [System.Math]::Min($length, $str.Length))
     }
 }
 
@@ -482,7 +594,7 @@ Function Remove-OutdatedModules{
             $latest = Get-InstalledModule $mod.name
             $specificmods = Get-InstalledModule $mod.name -AllVersions
             Write-Host ("{0} versions of this module found" -f ($specificmods.version).count)
-  
+
             foreach ($sm in $specificmods)
             {
                 if ($sm.version -ne $latest.version)
@@ -491,10 +603,102 @@ Function Remove-OutdatedModules{
 	                $sm | Uninstall-Module -force
 	                Write-Host "Done"
 	            }
-	
+
             }
         }
     }
 
 }
 #endregion
+
+Function New-SSHSharedKey{
+	<#
+    .SYNOPSIS
+    Generate Pre-shared key for SSH authentication
+
+    .DESCRIPTION
+    Generate Pre-shared key for SSH authentication to the remote device
+
+    .PARAMETER DestinationIP
+    Mandatory. Must specify destination IP
+
+    .PARAMETER User
+    Specify user for ssh; defaults to root
+
+    .PARAMETER Force
+    Overwrite current ssh key
+
+    .EXAMPLE
+    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
+
+    .LINK
+    http://vcloud-lab.com/entries/devops/How-to-Setup-Passwordless-SSH-Login-on-Windows
+    #>
+	[CmdletBinding(
+		SupportsShouldProcess=$True,
+		ConfirmImpact='Medium',
+		HelpURI='http://vcloud-lab.com',
+		DefaultParameterSetName='Manual'
+	)]
+
+	param
+	(
+        [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true)]
+		[string]$DestinationIP,
+		[string]$User = 'root',
+		[switch]$Force
+	)
+
+    Begin{
+        $oldLocation = Get-Location
+    	Set-Location -Path $env:USERPROFILE
+
+        try{Start-Process ssh -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SSHinstalled =$true}Catch{$SSHinstalled =$false}
+        try{Start-Process scp -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SCPinstalled =$true}Catch{$SCPinstalled =$false}
+    }
+    Process{
+        If($SSHinstalled -and $SCPinstalled){
+            Write-Host ("START: Generating Pre-shared key for SSH authentication with no password") -ForegroundColor Green
+            Write-Host ("INFO: You will be prompted a few times to login to {0}..." -f $DestinationIP) -ForegroundColor Gray
+        }Else{
+            Write-Host ("ERROR: SSH or SCP does not exist on host, install Git to use SSH") -ForegroundColor Red
+            return
+        }
+
+    	Write-Host 'INFO: Checking <yourprofile>/.ssh/id_rsa exists' -ForegroundColor Cyan
+    	if (-not(Test-Path -Path "./.ssh/id_rsa") -or $PSBoundParameters.ContainsKey('Force') )
+    	{
+    		if (-not(Test-Path -Path "./.ssh"))
+    		{
+    			[void](New-Item -Path "./" -Name .ssh -ItemType Directory -Force)
+    			Write-Host 'INFO: Created <yourprofile>/.ssh directory' -ForegroundColor Cyan
+    		}
+
+            #this would only run if the file was found and forced to remove
+    		If(Test-Path -Path "./.ssh/id_rsa")
+    		{
+                #remove both id_rsa and id_rsa.pub file
+                Remove-Item "./.ssh/id_rsa*" -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+            ssh-keygen.exe -t rsa -b 4096 -N '""' -f "./.ssh/id_rsa"
+    		Write-Host 'INFO: Generated  <yourprofile>/.ssh/id_rsa file' -ForegroundColor Cyan
+    	}
+    	else
+    	{
+    		Write-Host 'INFO: <yourprofile>/.ssh/id_rsa already exist, skipping...' -ForegroundColor Cyan
+    	}
+
+    	$id_rsa_Location = "$env:USERPROFILE/.ssh/id_rsa"
+    	$remoteSSHServerLogin = "$User@$DestinationIP"
+
+    	Write-Host "INFO: Copying <yourprofile>/.ssh/id_rsa.pub to $DestinationIP, Type password`n" -ForegroundColor Cyan
+    	scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+    	Write-Host "INFO: Updating authorized_keys on $DestinationIP, Type password`n" -ForegroundColor Cyan
+    	ssh "$remoteSSHServerLogin" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
+
+    	Write-Host "`nDONE: Try running command: 'ssh $User@$DestinationIP'; Now it will not prompt for password" -ForegroundColor Green
+    }
+    End{
+        Set-Location -Path $oldLocation
+    }
+}

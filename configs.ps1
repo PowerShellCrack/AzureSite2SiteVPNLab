@@ -1,13 +1,19 @@
 ﻿#============================================
 # General Configurations - EDIT THIS
 #============================================
-$domain = 'contoso.com' #just a name for now (no DC install....yet)
-$LabPrefix = 'LAB' #identifier for names in lab
+
+$LabPrefix = '<lab name>' #identifier for names in lab
+
+$domain = '<lab fqdn>' #just a name for now (no DC install....yet)
+
+$UseBGP = $false # not required for VPN, but can help. Costs more.
+#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
 
 $AzEmail = '' #used only in autoshutdown (for now)
 
+
 #this is used to configure default username and password on Azure VM's
-$VMAdminUser = 'xAdmin'
+$VMAdminUser = '<admin>'
 $VMAdminPassword = '<password>'
 
 $OnPremSubnetCIDR = '10.100.0.0/16'
@@ -17,17 +23,17 @@ $AzureSpokeSubnetCIDR = '10.20.0.0/16'
 
 $ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
 
-
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 
 #used in step 5
 $AzureVnetToVnetPeering = @{
-    SiteASubscriptionID = 'cb673656-d089-4158-a27a-628bf324ce44'
-    SiteATenantID= '72f988bf-86f1-41af-91ab-2d7cd011db47'
-    SiteBSubscriptionID = '07b9b78b-95b9-4d20-96e4-049cce8d92fb'
-    SiteBTenantID = '2ec9dcf0-b109-434a-8bcd-238a3bf0c6b2'
+    SiteASubscriptionID = '<SubscriptionAID>'
+    SiteATenantID= '<TenantAID>'
+    SiteBSubscriptionID = '<SubscriptionBID>'
+    SiteBTenantID = '<TenantBID>'
 }
+
 #============================================
 # STOP
 #============================================
@@ -201,13 +207,10 @@ If(!$Global:randomChar){
 # AZURE CONNECTION
 #============================================
 #region connect to Azure if not already connected
-$Subscription = Connect-AzureEnvironment
+$Subscription = Connect-MyAzureEnvironment -ErrorAction Stop
 
 Write-Host ("Using Account ID:   {0} " -f $Subscription.Account.Id) -ForegroundColor Green
 Write-host ("Using Subscription: {0} " -f $Subscription.Subscription.Name) -ForegroundColor Green
-
-
-#used in step 5
 
 #============================================
 # LAB CONFIGURATIONS
@@ -256,12 +259,12 @@ $VyOSConfig = @{
 
     UseDNSOption = 'Internal' # Options: 'Internal'<--uses VM DNS like a DC; 'External' <--Use home network DNS configs; 'Internet' <-- Uses Google
     InternalDNSIP = @(
-        '10.100.1.1'
+        '11.100.1.1'
     )
     EnableDHCP = $false
     DHCPPoolsRanges = @{
-        '10.100.1.0' = '10.100.1.255'
-        '10.100.2.0' = '10.100.2.255'
+       '10.100.1.0' = '10.100.1.255'
+       '10.100.2.0' = '10.100.2.255'
     }
 
     EnablePXEPRelay = $true
@@ -289,10 +292,10 @@ $AzureSimpleConfig = @{
     ConnectionName = "ConnTo-$RegionName"
 
     #Azure vnet CIDR
-    VnetCIDRPrefix = '10.1.0.0/16'
+    VnetCIDRPrefix = '10.10.0.0/16'
     #Azure subnet prefixes
-    VnetSubnetPrefix = '10.1.0.0/24'
-    VnetGatewayPrefix = '10.1.255.0/27'
+    VnetSubnetPrefix = '10.10.0.0/24'
+    VnetGatewayPrefix = '10.10.255.0/27'
 
     #storage account info
     StorageAccountName = "sa-$RegionName"
@@ -304,7 +307,7 @@ $AzureSimpleConfig = @{
 #region Virtual Machine Configurations
 #-------------------------------------------
 $AzureSimpleVM = @{
-    LocalAdminUser = $VMAdminUser
+    LocalAdminUser = "xAdmin"
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ("$RegionName-vm1" | Set-TruncateString -length 15)
     Name = "$RegionName-vm1"
@@ -320,7 +323,7 @@ $AzureSimpleVM = @{
     TunnelDescription = 'Gateway To Azure'
 
     EnableAutoshutdown = $true
-    AutoShutdownNotificationType = $AzEmail # set to either an email or webhook url 
+    AutoShutdownNotificationType = $AzEmail #set to either an email or webhook url
     ShutdownTimeZone = 'Eastern Standard Time'
     ShutdownTime = '21:00'
 }
@@ -343,12 +346,12 @@ $AzureAdvConfigSiteA = @{
     VnetSpokeCIDRPrefix = '10.20.0.0/16'
     VnetSpokeSubnetName = "Spoke-Subnet"
     VnetSpokeSubnetAddressPrefix = '10.20.0.0/24'
-
+    
     VnetHubName = "$RegionAName-Hub-vNet"
     VnetHubCIDRPrefix = '10.10.0.0/16'
     VnetHubSubnetName = "Hub-Subnet"
     VnetHubSubnetAddressPrefix = '10.10.0.0/24'
-    VnetHubSubnetGatewayAddressPrefix = '10.10.200.0/26'
+    VnetHubSubnetGatewayAddressPrefix = '10.11.200.0/26'
 
     VnetASN = 65010
 
@@ -370,10 +373,12 @@ $AzureAdvConfigSiteA = @{
 
     StorageAccountName = ($RegionAName).Replace(" ",'').ToLower() + '-sa'
 }
+
+
 # Virtual Machine Configurations - Region 1
 #-------------------------------------------
 $AzureVMSiteA = @{
-    LocalAdminUser = $VMAdminUser
+    LocalAdminUser = 'xAdmin'
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ("$LabPrefix-dc2" | Set-TruncateString -length 15)
     Name = "$LabPrefix-dc2"
@@ -406,18 +411,18 @@ $RegionBName = "$($LabPrefix.Replace(" ",''))-SiteB"
 
 #Static Properties [EDIT ALLOWED]
 $AzureAdvConfigSiteB = @{
-    LocationName = 'West US'
-
+    LocationName = 'East US 2'
+    
     ResourceGroupName = "$RegionBName-rg"
 
     VnetSpokeName = "$RegionBName-Spoke-vNet"
     VnetSpokeCIDRPrefix = '10.21.0.0/16'
-    VnetSpokeSubnetName = "Spoke-Subnet"
+    VnetSpokeSubnetName = "Spoke-Subnet1"
     VnetSpokeSubnetAddressPrefix = '10.21.0.0/24'
-
+    
     VnetHubName = "$RegionBName-Hub-vNet"
     VnetHubCIDRPrefix = '10.11.0.0/16'
-    VnetHubSubnetName = "Hub-Subnet"
+    VnetHubSubnetName = "Hub-Subnet1"
     VnetHubSubnetAddressPrefix = '10.11.0.0/24'
     VnetHubSubnetGatewayAddressPrefix = '10.11.200.0/26'
 
@@ -445,7 +450,7 @@ $AzureAdvConfigSiteB = @{
 # Virtual Machine Configurations - Region 2
 #-------------------------------------------
 $AzureVMSiteB = @{
-    LocalAdminUser = $VMAdminUser
+    LocalAdminUser = 'xAdmin'
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ("$RegionBName-vm1" | Set-TruncateString -length 15)
     Name = "$RegionBName-vm1"

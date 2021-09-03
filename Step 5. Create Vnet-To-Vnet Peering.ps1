@@ -7,14 +7,14 @@
 
 
 # connect to first tenant to setup vNET peering
-Connect-AzAccount -Tenant $AzureConnections.SiteATenantID
-Select-AzSubscription -Tenant $AzureConnections.SiteATenantID
+Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteATenantID
+Select-AzSubscription -Tenant $AzureVnetToVnetPeering.SiteATenantID
 
 $vNetA=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubSubnetName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 Add-AzVirtualNetworkPeering `
   -Name 'ToSiteBHub' `
   -VirtualNetwork $vNetA `
-  -RemoteVirtualNetworkId "/subscriptions/$($AzureConnections.SiteBSubscriptionID)/resourceGroups//$($AzureAdvConfigSiteB.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteB.VnetHubSubnetName)" `
+  -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteBSubscriptionID)/resourceGroups//$($AzureAdvConfigSiteB.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteB.VnetHubSubnetName)" `
   -AllowGatewayTransit `
   -AllowForwardedTraffic
 
@@ -22,15 +22,15 @@ Clear-AzDefault
 
 
 # connect to second tenant to complete vNET peering
-Connect-AzAccount -Tenant $AzureConnections.SiteBTenantID
-Select-AzSubscription -Tenant $AzureConnections.SiteBTenantID
+Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteBTenantID
+Select-AzSubscription -Tenant $AzureVnetToVnetPeering.SiteBTenantID
 
 
 $vNetB=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetHubSubnetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
 Add-AzVirtualNetworkPeering `
   -Name 'ToSiteAHub' `
   -VirtualNetwork $vNetB `
-  -RemoteVirtualNetworkId "/subscriptions/$($AzureConnections.SiteASubscriptionID)/resourceGroups/$($AzureAdvConfigSiteA.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteA.VnetHubSubnetName)" `
+  -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteASubscriptionID)/resourceGroups/$($AzureAdvConfigSiteA.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteA.VnetHubSubnetName)" `
   -AllowForwardedTraffic `
   -UseRemoteGateways
 

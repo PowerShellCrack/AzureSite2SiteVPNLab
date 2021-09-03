@@ -5,7 +5,7 @@
 - Azure subscription (VSE or Trial will work)
 - Windows OS thats supports Hyper-V
 - Edge router with S2S IPSEC VPN capabilities OR vyOS Router
-  - This lab uses a virtual router named VyOS. The ISO can be found [**here**](https://downloads.vyos.io/?dir=release/legacy/1.1.8/VyOS-1.1.8-amd64.iso)
+  - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://downloads.vyos.io/?dir=release/legacy/1.1.8/VyOS-1.1.8-amd64.iso)
 - Access to home router and port forwarding
 - Partial knowledge with Powershell
 - SSH utility such as putty or git cmd. You can get it [**here**](https://git-scm.com/downloads)
@@ -16,29 +16,45 @@
   - Rename _configs.example.ps1_ to **configs.ps1**. 
   - Be sure to look through the hashtables and change anything you feel is necessary.  
   - All the script use this as an answer file for each of the setup. The answers are loaded in hashtable format
-  - There are few things you should change or verify the values:
+  - There are few things you should change on the top section:
 
 ```powershell
-    $domain = '<domain FQDN>'
-    $LabPrefix = '<domain Netbios>'
-    $AzEmail = 'tenantemail@tenantname.com'
-    $AzSubscription = '<your subscription name>'
- ```
- 
- ```json
-    ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
-    TimeZone = 'US/Eastern'
-    LocationName = 'East US 2'
-    LocalAdminUser = '<admin account>'
-    LocalAdminPassword = '<admin password>'
-    ShutdownTimeZone = 'Eastern Standard Time'
-    ShutdownTime = '21:00'
+$LabPrefix = '<lab name>' #identifier for names in lab
+
+$domain = '<lab fqdn>' #just a name for now (no DC install....yet)
+
+$UseBGP = $false # not required for VPN, but can help. Costs more.
+#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
+
+$AzEmail = '' #used only in autoshutdown (for now)
+
+
+#this is used to configure default username and password on Azure VM's
+$VMAdminUser = '<admin>'
+$VMAdminPassword = '<password>'
+
+$OnPremSubnetCIDR = '10.100.0.0/16'
+
+$AzureHubSubnetCIDR = '10.10.0.0/16'
+$AzureSpokeSubnetCIDR = '10.20.0.0/16'
+
+$ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
+
+#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
+$UseBGP = $false # not required for VPN, but can help. Costs more.
+
+#used in step 5
+$AzureVnetToVnetPeering = @{
+    SiteASubscriptionID = '<SubscriptionAID>'
+    SiteATenantID= '<TenantAID>'
+    SiteBSubscriptionID = '<SubscriptionBID>'
+    SiteBTenantID = '<TenantBID>'
+}
 ```
 
-- **library.ps1** <-- Custom functions used to automate; linked to all scripts
-  - Don't change anything in here unless you know what your are doing
+- **library.ps1** <-- Custom functions used to automate 
 
-**NOTE**: All logs are written using a transcript to the logs folder; just in case you need to troubleshoot powershell errors
+**NOTE**: All logs are written using a transcript to the logs folder; just in case you need to troubleshoot
 
 ## Setup Hyper-V Lab
 
@@ -50,10 +66,11 @@
 
 1. run script: **Step 2. Setup Vyos Router in Lab.ps1**
 2. The first few steps for the vyos will be manual until SSH is established
-   - You will be prompted to make configurations to the router. Also once SSH is established, at the end, you will be presented with a copy/paste configurations.
+   - You will be prompted to make configurations to the router. Also once SSH is established the script will generate RSA key to auto logon.
+   This is a temporary process because vyos does not save authorized_keys.  if login is successful, it will auto configure the vyos router for you otherwise you will be presented with a copy/paste configurations.
    - You can use the script to load the vYOS router as long as you change the location to your ISO. eg:
 
-```json
+```powershell
 	ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
 ```
 
@@ -62,7 +79,7 @@ There are few options when building the Azure lab. Your Options are:
 
   _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub or spoke configurations. 
 
-  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azre S2S VPN with hub and spoke design. Run script: 
+  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Run script: 
 
   _Option C_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts [in order]:
   
@@ -86,7 +103,7 @@ To setup a VM, run the script corresponding to the type of Azure VPN you set up 
 1. **Step 4B-1. Build Azure VM - Region 1.ps1**
 2. **Step 4B-2. Build Azure VM - Region 2.ps1**
 
-If all went well, you VM will connect to each other.
+If all went well, the vyos router will connect each Azure site.
 
 **INFO**: The _vyos_setup_ folder are templates and samples of known working configurations. Can be used to compare configurations in your VyOS router
 

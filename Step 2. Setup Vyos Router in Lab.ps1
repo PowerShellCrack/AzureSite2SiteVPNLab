@@ -12,8 +12,8 @@ $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 If($null -eq $VM){
     Try{
         New-VHD -Path ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx') -SizeBytes 2GB -Dynamic
-        New-VM -Name $VyOSConfig.VMName -VHDPath ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx') -SwitchName $VyOSConfig.ExternalInterface -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop
-        
+        New-VM -Name $VyOSConfig.VMName -VHDPath ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx') `
+            -SwitchName $VyOSConfig.ExternalInterface -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop
         #Connect ISO
         Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation
     }
@@ -31,9 +31,10 @@ If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop}
 Write-Host "Configuring router for inital configurations..." -ForegroundColor Gray
 
 #Trunk HyperV Network for internal networks
-Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | Set-VMNetworkAdapterVlan -Trunk -NativeVlanId 10 -AllowedVlanIdList 1-100
+Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | Set-VMNetworkAdapterVlan -Trunk `
+    -NativeVlanId 10 -AllowedVlanIdList 1-100
 #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} |  Set-VMNetworkAdapterVlan -Untagged
-Get-VMNetworkAdapterVlan -VMName $VyOSConfig.VMName
+#Get-VMNetworkAdapterVlan -VMName $VyOSConfig.VMName
 
 
 Start-Sleep 10
@@ -110,7 +111,7 @@ do {
         Write-Host "Failed! Check IP [run command in router: show int ethernet eth0 brief]" -ForegroundColor Red
     } Else {
         Write-Host ("IP [{0}] was pingable" -f $VyOSExternalIP) -ForegroundColor Green
-        $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExtInterfaceIP)
+        $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
         $VyOSExternalIP | Out-File "$env:temp\VyOSextip.txt" -Force
     }
 } until ($VyOSExternalIP -as [System.Net.IPAddress] -and $TestIP)
@@ -121,7 +122,7 @@ Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 
 start-sleep 10
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-$VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*"
+$VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*" | Sort Name
 ForEach($net in $VyOSNetworks) {
     If($net.Name -in $VM.NetworkAdapters.switchname){
         Write-Host ("Network [{0}] is already attached to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Yellow
@@ -130,11 +131,14 @@ ForEach($net in $VyOSNetworks) {
         Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $net.Name -ErrorAction Stop
         Write-Host ("Attached network [{0}] is to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
     }
-} 
+}
 
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 Start-Sleep 10
 #endregion
+
+#temporary set auto logon ssh keys
+New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
 
 #NOT WORKING
@@ -142,7 +146,6 @@ Start-Sleep 10
 # Create External conenction (Not default switch)
 # Fix network switch
 # create UI
-
 
 
 #region Build VyOS Final Configuration Commands
@@ -156,22 +159,24 @@ set system domain-name $domain
 set system time-zone $($VyOSConfig.TimeZone)
 
 #External Interface Configuration
-set interfaces ethernet eth0 description 'Switch_External'
+set interfaces ethernet eth0 description 'External'
 
 #DNS Configuration
 set service dns forwarding cache-size '0'
 "@
 $i=1
-foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix){
-    $subnet = $SubnetCIDR.Split("/")[0]
-    $mask = $SubnetCIDR.Split("/")[1]
+#TEST $SubnetCIDR = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name |Select -first 1
+foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+    $Subnet = $SubnetCIDR.Name.Split("/")[0]
+    $mask = $SubnetCIDR.Name.Split("/")[1]
+    $Description = ("{0} for {1}" -f $vYosConfig.NetPrefix,$VyOSConfig.LocalSubnetPrefix[$SubnetCIDR.Name])
     $IPInfo = Get-NetworkStartEndAddress $Subnet -Prefix $mask
     $GatewayInfo = Get-TypicalIPRange -StartIP $IPInfo.StartingIP -EndIP $IPInfo.EndingIP -Gateway Last
     $VyOSFinal += @"
 `n
 #Interface $i Configuration
 set interfaces ethernet eth$i address $($IPInfo.EndingIP)/$mask
-set interfaces ethernet eth$i description '$($LabPrefix.ToUpper())-$i'
+set interfaces ethernet eth$i description '$Description'
 set service dns forwarding listen-on 'eth$i'
 "@
 
@@ -181,11 +186,11 @@ set service dns forwarding listen-on 'eth$i'
 # Enable DHCP Configuration for eth$i
 
 set service dhcp-server disabled 'false'
-set service dhcp-server shared-network-name ETH$($i)_Pool subnet $SubnetCIDR start $($GatewayInfo.StartIP) stop $($GatewayInfo.EndIP)
-set service dhcp-server shared-network-name ETH1_Pool subnet $SubnetCIDR dns-server $NextHop
-set service dhcp-server shared-network-name ETH1_Pool subnet $SubnetCIDR dns-server $($GatewayInfo.GatewayIP)
-set service dhcp-server shared-network-name ETH1_Pool subnet $SubnetCIDR default-router $($GatewayInfo.GatewayIP)
-set service dhcp-server shared-network-name ETH1_Pool subnet $SubnetCIDR lease '86400'
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) start $($GatewayInfo.StartIP) stop $($GatewayInfo.EndIP)
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server $NextHop
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server $($GatewayInfo.GatewayIP)
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) default-router $($GatewayInfo.GatewayIP)
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) lease '86400'
 "@
 
     }
@@ -210,7 +215,6 @@ set service dns forwarding dhcp eth0
         $VyOSFinal += @"
 set service dns forwarding name-server '$IP'
 "@
-                    
                     }
 }
 'Internet' {$VyOSFinal += @"
@@ -219,14 +223,13 @@ set service dns forwarding name-server '$IP'
 `n
 set service dns forwarding name-server '8.8.8.8'
 set service dns forwarding name-server '$NextHop'
-"@    
+"@
     }
 }
 
 If($VyOSConfig.EnablePXEPRelay){
     $i=1
     ForEach($net in $VyOSNetworks){
-        
         $VyOSFinal += @"
 `n
 #Enable DHCP relay (PXE boot) for eth($i):
@@ -237,7 +240,7 @@ set service dhcp-relay interface eth$i
 
 $VyOSFinal += @"
 `n
-#If DHCP Disabled, Set the IP address of the other DHCP server:
+#If DHCP disabled, Set the IP address of the other DHCP server:
 set service dhcp-relay server '$($VyOSConfig.PXERelayIP)'
 
 #Discard DHCP packages already containing relay agent
@@ -256,17 +259,49 @@ set nat source rule 100 translation address masquerade
 }
 
 $VyOSFinal += @"
-`n
+
 commit
 save
+
 "@
 
+#endregion
 
-Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-Write-Host $VyOSFinal -ForegroundColor Gray
 
-Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in ssh session:`n" -ForegroundColor Yellow
-Write-Host "reboot now" -ForegroundColor Gray
+#build script for router
+#https://docs.vyos.io/en/crux/automation/command-scripting.html
+'#!/bin/vbash' | Set-Content $env:temp\vyos.script
+'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
+'' | Add-Content $env:temp\vyos.script
+$VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
+'exit' | Add-Content $env:temp\vyos.script
+'run show int' | Add-Content $env:temp\vyos.script
+'' | Add-Content $env:temp\vyos.script
+'run reboot now' | Add-Content $env:temp\vyos.script
+#get-content $env:temp\vyos.script
+
+#copy script to vyos router
+$remoteSSHServerLogin = "vyos@$VyOSExternalIP"
+scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
+
+$scriptfile = 'intconfigure.sh'
+#build bash command
+$bashCommands = @(
+    'mkdir -p ~/.scripts'
+    'chmod 700 ~/.scripts'
+    "rm -f ~/.scripts/$scriptfile"
+    "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
+    'rm -f ~/tmp.sh'
+    "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
+    "chmod u+x ~/.scripts/$scriptfile"
+    "sg vyattacfg -c ~/.scripts/$scriptfile"
+)
+#jooin all commands as single line separated with &&
+$bashCommand = $bashCommands -join ' && '
+ssh "vyos@$VyOSExternalIP" $bashCommand
+
+write-Host 
+Write-Host "vyos is rebooting...." -ForegroundColor Gray
 #endregion
 
 Stop-Transcript
