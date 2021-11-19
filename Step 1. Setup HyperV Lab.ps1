@@ -3,7 +3,15 @@
 #endregion
 
 #install hyper-V feature
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -ne 'Enabled'){
+    $HyperVResult = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+    If($HyperVResult.RestartNeeded -eq $true){
+        Write-Host ("Hyper-V does require a reboot...") -ForegroundColor Yellow
+    }
+}
+Else{
+    Write-Host ("Hyper-V is already installed.") -ForegroundColor Green
+}
 
 
 #Grab physical network
@@ -24,7 +32,9 @@ Else{
 $HyperVSwitches = Get-VMSwitch
 
 #region Create External Switch
-If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') ) {New-VMSwitch -Name 'External' -NetAdapterName $FastestPhysicalAdapter -AllowManagementOS $true -Notes 'External Switch'}
+If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') ) {
+    New-VMSwitch -Name 'External' -NetAdapterName $FastestPhysicalAdapter -AllowManagementOS $true -Notes 'External Switch'
+}
 $VmSwitchExternal = (Get-VMSwitch -SwitchType External).Name
 #endregion
 

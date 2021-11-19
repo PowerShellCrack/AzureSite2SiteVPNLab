@@ -50,7 +50,8 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
 {
     #region 1. Create virtual network A
-    $vNetA = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
+    $vNetA = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+                        -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix 
     #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
     Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix
     Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
@@ -60,9 +61,11 @@ If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupN
 If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
 {
     # Create virtual network B
-    $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix -Location $AzureAdvConfigSiteA.LocationName
+    $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+                        -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
     #Create a subnet configuration for first VM subnet (vnet B)
-    Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
+    Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
+            -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
     Set-AzVirtualNetwork -VirtualNetwork $vNetB
     #endregion
 }
@@ -79,7 +82,8 @@ $gwsubnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwo
 #endregion
 
 #region 3. Create Public IP
-New-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -AllocationMethod Dynamic
+New-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+        -Location $AzureAdvConfigSiteA.LocationName -AllocationMethod Dynamic
 $gwpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 
 # get a public ip for the gateway
@@ -96,7 +100,8 @@ Else{
     $VNGBGPParams.add('EnableBgp',$false)
 }
 # This will take a while; typically about 30 minutes
-New-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard @VNGBGPParams
+New-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+        -Location $AzureAdvConfigSiteA.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard @VNGBGPParams
 
 #fetch virtual network gateway
 $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
@@ -110,13 +115,16 @@ If($UseBGP){
     $LNGBGPParams.add('BgpPeeringAddress',$VyOSConfig.BgpPeeringAddress)
 }
 
-New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix @LNGBGPParams
+New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+        -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix @LNGBGPParams
 #endregion
 
 #region 6. get local gateway and on-prem local info
 $Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 #connect the two
-New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -enablebgp $UseBGP
+New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+            -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -enablebgp $UseBGP
 #endregion
 
 $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
@@ -209,47 +217,62 @@ save
 "@
 
 
-#build script for router
-#https://docs.vyos.io/en/crux/automation/command-scripting.html
-'#!/bin/vbash' | Set-Content $env:temp\vyos.script
-'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
-'' | Add-Content $env:temp\vyos.script
-$VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
-'exit' | Add-Content $env:temp\vyos.script
-'run restart vpn' | Add-Content $env:temp\vyos.script
-'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
-'' | Add-Content $env:temp\vyos.script
-If($UseBGP){
-    'run show ip bgp' | Add-Content $env:temp\vyos.script
+If($RouterAutomationMode){
+    #region Automation Mode
+    #build script for router
+    #https://docs.vyos.io/en/crux/automation/command-scripting.html
+    '#!/bin/vbash' | Set-Content $env:temp\vyos.script
+    'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
+    '' | Add-Content $env:temp\vyos.script
+    $VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
+    'exit' | Add-Content $env:temp\vyos.script
+    'run restart vpn' | Add-Content $env:temp\vyos.script
+    'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
+    '' | Add-Content $env:temp\vyos.script
+    If($UseBGP){
+        'run show ip bgp' | Add-Content $env:temp\vyos.script
+    }
+    #'' | Add-Content $env:temp\vyos.script
+    #'run reboot now' | Add-Content $env:temp\vyos.script
+    #get-content $env:temp\vyos.script
+
+    #copy script to vyos router
+    $remoteSSHServerLogin = "vyos@$VyOSExternalIP"
+    scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
+
+
+    $scriptfile = 'siteas2svpn.sh'
+    #build bash command
+    $bashCommands = @(
+        'mkdir -p ~/.scripts'
+        'chmod 700 ~/.scripts'
+        "rm -f ~/.scripts/$scriptfile"
+        "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
+        'rm -f ~/tmp.sh'
+        "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
+        "chmod u+x ~/.scripts/$scriptfile"
+        "sg vyattacfg -c ~/.scripts/$scriptfile"
+    )
+    #jooin all commands as single line separated with &&
+    $bashCommand = $bashCommands -join ' && '
+    ssh "vyos@$VyOSExternalIP" $bashCommand
+
+    write-Host 
+    Write-Host "vyos is rebooting...." -ForegroundColor Gray
+    #endregion
+
 }
-#'' | Add-Content $env:temp\vyos.script
-#'run reboot now' | Add-Content $env:temp\vyos.script
-#get-content $env:temp\vyos.script
+Else{
+    $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2sregion1setup.txt"}
+    #region Copy Paste Mode
+    Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n or" -ForegroundColor Yellow
+    Write-Host "`nCopy code from $PSScriptRoot\Logs\vyoss2sregion1setup.txt" -ForegroundColor Yellow
+    Write-Host $VyOSFinal -ForegroundColor Gray
 
-#copy script to vyos router
-$remoteSSHServerLogin = "vyos@$VyOSExternalIP"
-scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
-
-
-$scriptfile = 'siteas2svpn.sh'
-#build bash command
-$bashCommands = @(
-    'mkdir -p ~/.scripts'
-    'chmod 700 ~/.scripts'
-    "rm -f ~/.scripts/$scriptfile"
-    "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
-    'rm -f ~/tmp.sh'
-    "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
-    "chmod u+x ~/.scripts/$scriptfile"
-    "sg vyattacfg -c ~/.scripts/$scriptfile"
-)
-#jooin all commands as single line separated with &&
-$bashCommand = $bashCommands -join ' && '
-ssh "vyos@$VyOSExternalIP" $bashCommand
-
-write-Host 
-Write-Host "vyos is rebooting...." -ForegroundColor Gray
-#endregion
+    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in console or ssh session:`n" -ForegroundColor Yellow
+    Write-Host "reboot now" -ForegroundColor Gray
+    #endregion
+}
 
 #make a connection the VPN health probe
 add-type @"

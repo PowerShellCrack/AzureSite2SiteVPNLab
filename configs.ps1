@@ -34,6 +34,9 @@ $AzureVnetToVnetPeering = @{
     SiteBTenantID = '<TenantBID>'
 }
 
+#Uses Git, SSH and SCP to build vyos router
+# 99% automated; but 80% successful
+$RouterAutomationMode = $False
 #============================================
 # STOP
 #============================================
@@ -207,11 +210,15 @@ If(!$Global:randomChar){
 # AZURE CONNECTION
 #============================================
 #region connect to Azure if not already connected
-$Subscription = Connect-MyAzureEnvironment -ErrorAction Stop
-
-Write-Host ("Using Account ID:   {0} " -f $Subscription.Account.Id) -ForegroundColor Green
-Write-host ("Using Subscription: {0} " -f $Subscription.Subscription.Name) -ForegroundColor Green
-
+Try{
+    $Subscription = Connect-AzureEnvironment -ErrorAction Stop
+    Write-Host ("Using Account ID:   {0} " -f $Subscription.Account.Id) -ForegroundColor Green
+    Write-host ("Using Subscription: {0} " -f $Subscription.Subscription.Name) -ForegroundColor Green
+}
+Catch{
+    Write-Host ("DO NOT CONTINUE. {0} " -f $_.exception.message) -ForegroundColor Red
+}
+#endregion
 #============================================
 # LAB CONFIGURATIONS
 #============================================
@@ -226,6 +233,10 @@ $HyperVConfig = @{
     ExternalNetworks = @{
         External = "Default Switch"
     }
+
+    ConfigureForVLAN = $False
+    VLANID = 21
+    AllowedvLanIdRange = '1-100'
 }
 #endregion
 

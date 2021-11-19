@@ -1,10 +1,29 @@
-﻿#https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
+﻿<#
+    .SYNOPSIS
+        Set vyos router
+
+    .DESCRIPTION
+        Set VyOS router in Hyper-V
+
+    .NOTES
+        1. Creates New VHD file
+        2. Create new General 1 VM and attached the VHD
+        3. Mounts vyOS IOS to VM
+        4. COnfogures Hyper-V networks for VLANID
+        5. Boots VM and requires manual input for install
+        6. Unmounts ISO, Reboots VM and requires lan setup
+        7. Setup external network and SSH
+        8. Adds LAN networks to router and sets up LAN configuration
+
+#>
+
+#https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
 #region Grab Configurations
 . "$PSScriptRoot\Configs.ps1"
 #endregion
 
 #start transcript
-$LogfileName = "$RegionAName-HyperVSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$RegionAName-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
@@ -26,15 +45,22 @@ Else{
     Write-Host ("VM Already created named [{0}]." -f $VM.Name) -ForegroundColor Green
 }
 
-#Start-VM
-If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop}
-Write-Host "Configuring router for inital configurations..." -ForegroundColor Gray
 
-#Trunk HyperV Network for internal networks
-Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | Set-VMNetworkAdapterVlan -Trunk `
-    -NativeVlanId 10 -AllowedVlanIdList 1-100
-#Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} |  Set-VMNetworkAdapterVlan -Untagged
+#Trunk HyperV Network for internal networks; determine if VLAN needs to be used.
+#https://docs.microsoft.com/en-us/powershell/module/hyper-v/set-vmnetworkadaptervlan?view=windowsserver2019-ps
+If($HyperVConfig.ConfigureForVLAN)
+{
+    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | 
+        Set-VMNetworkAdapterVlan -Trunk -NativeVlanId $HyperVConfig.VLANID -AllowedVlanIdList $VyOSConfig.AllowedvLanIdRange
+}
+Else{
+    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | 
+        Set-VMNetworkAdapterVlan -Untagged
+}
 #Get-VMNetworkAdapterVlan -VMName $VyOSConfig.VMName
+
+If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop}
+Write-Host "Configuring router for inital settings..." -ForegroundColor Gray
 
 
 Start-Sleep 10
@@ -81,7 +107,7 @@ You will be enabling SSH on the Virtual Machine router
 Connect to router and answer the questions below on the VM
 =======================================
 VyOS Base Configuration
-VyOS login: VyOS
+VyOS login: vyos
 Password: [New password]
 VyOS@VyOS:~$ configure
 VyOS@VyOS# set interfaces ethernet eth0 address dhcp
@@ -91,7 +117,7 @@ VyOS@VyOS# save
 VyOS@VyOS# exit
 VyOS@VyOS:~$ show int
 "@
-write-host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
+
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
@@ -99,6 +125,8 @@ do {
 } until ($response1 -eq 'Y')
 Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting via VM" -ForegroundColor Yellow
 #endregion
+
+write-host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
 
 #region Prompt for external interface for router
 do {
@@ -134,22 +162,14 @@ ForEach($net in $VyOSNetworks) {
 }
 
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-Start-Sleep 10
+
+#wait for VM to boot completely
+Start-Sleep 30
 #endregion
 
-#temporary set auto logon ssh keys
-New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
-
-#NOT WORKING
-# Add NATS for each Network
-# Create External conenction (Not default switch)
-# Fix network switch
-# create UI
-
-
-#region Build VyOS Final Configuration Commands
-$VyOSFinal = @"
+#region Build VyOS Lan Configuration Commands
+$VyOSLanCmd = @"
 #VyOS Extended Configuration Script
 configure
 
@@ -172,7 +192,7 @@ foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Nam
     $Description = ("{0} for {1}" -f $vYosConfig.NetPrefix,$VyOSConfig.LocalSubnetPrefix[$SubnetCIDR.Name])
     $IPInfo = Get-NetworkStartEndAddress $Subnet -Prefix $mask
     $GatewayInfo = Get-TypicalIPRange -StartIP $IPInfo.StartingIP -EndIP $IPInfo.EndingIP -Gateway Last
-    $VyOSFinal += @"
+    $VyOSLanCmd += @"
 `n
 #Interface $i Configuration
 set interfaces ethernet eth$i address $($IPInfo.EndingIP)/$mask
@@ -181,7 +201,7 @@ set service dns forwarding listen-on 'eth$i'
 "@
 
     If($VyOSConfig.EnableDHCP){
-        $VyOSFinal += @"
+        $VyOSLanCmd += @"
 
 # Enable DHCP Configuration for eth$i
 
@@ -199,25 +219,25 @@ $i++
 }
 
 switch($VyOSConfig.UseDNSOption){
-'External' {$VyOSFinal += @"
+'External' {$VyOSLanCmd += @"
 `n
 #forward home network dhcp`n
 set service dns forwarding dhcp eth0
 "@
 }
 
-'Internal' {$VyOSFinal += @" 
+'Internal' {$VyOSLanCmd += @"
 `n
 #Set internal dns
 
 "@
     foreach ($IP in $VyOSConfig.InternalDNSIP){
-        $VyOSFinal += @"
+        $VyOSLanCmd += @"
 set service dns forwarding name-server '$IP'
 "@
                     }
 }
-'Internet' {$VyOSFinal += @"
+'Internet' {$VyOSLanCmd += @"
 
 #Set internet dns
 `n
@@ -230,7 +250,7 @@ set service dns forwarding name-server '$NextHop'
 If($VyOSConfig.EnablePXEPRelay){
     $i=1
     ForEach($net in $VyOSNetworks){
-        $VyOSFinal += @"
+        $VyOSLanCmd += @"
 `n
 #Enable DHCP relay (PXE boot) for eth($i):
 set service dhcp-relay interface eth$i
@@ -238,7 +258,8 @@ set service dhcp-relay interface eth$i
     $i=$i+1
     }
 
-$VyOSFinal += @"
+If(!$VyOSConfig.EnableDHCP){
+    $VyOSLanCmd += @"
 `n
 #If DHCP disabled, Set the IP address of the other DHCP server:
 set service dhcp-relay server '$($VyOSConfig.PXERelayIP)'
@@ -247,9 +268,10 @@ set service dhcp-relay server '$($VyOSConfig.PXERelayIP)'
 set service dhcp-relay relay-options relay-agents-packets discard
 "@
 }
+}
 
 If($VyOSConfig.EnableNAT){
-    $VyOSFinal += @"
+    $VyOSLanCmd += @"
 
 #Enable NAT Configuration
 set nat source rule 100 outbound-interface eth0
@@ -258,7 +280,7 @@ set nat source rule 100 translation address masquerade
 "@
 }
 
-$VyOSFinal += @"
+$VyOSLanCmd += @"
 
 commit
 save
@@ -268,40 +290,57 @@ save
 #endregion
 
 
-#build script for router
-#https://docs.vyos.io/en/crux/automation/command-scripting.html
-'#!/bin/vbash' | Set-Content $env:temp\vyos.script
-'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
-'' | Add-Content $env:temp\vyos.script
-$VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
-'exit' | Add-Content $env:temp\vyos.script
-'run show int' | Add-Content $env:temp\vyos.script
-'' | Add-Content $env:temp\vyos.script
-'run reboot now' | Add-Content $env:temp\vyos.script
-#get-content $env:temp\vyos.script
+If($RouterAutomationMode){
+    #region Automation Mode
+    #temporary set auto logon ssh keys
+    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
+    
+    #build script for router
+    #https://docs.vyos.io/en/crux/automation/command-scripting.html
+    '#!/bin/vbash' | Set-Content $env:temp\vyos.script
+    'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
+    '' | Add-Content $env:temp\vyos.script
+    $VyOSLanCmd -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
+    'exit' | Add-Content $env:temp\vyos.script
+    'run show int' | Add-Content $env:temp\vyos.script
+    '' | Add-Content $env:temp\vyos.script
+    'run reboot now' | Add-Content $env:temp\vyos.script
+    #get-content $env:temp\vyos.script
 
-#copy script to vyos router
-$remoteSSHServerLogin = "vyos@$VyOSExternalIP"
-scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
+    #copy script to vyos router
+    $remoteSSHServerLogin = "vyos@$VyOSExternalIP"
+    scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
 
-$scriptfile = 'intconfigure.sh'
-#build bash command
-$bashCommands = @(
-    'mkdir -p ~/.scripts'
-    'chmod 700 ~/.scripts'
-    "rm -f ~/.scripts/$scriptfile"
-    "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
-    'rm -f ~/tmp.sh'
-    "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
-    "chmod u+x ~/.scripts/$scriptfile"
-    "sg vyattacfg -c ~/.scripts/$scriptfile"
-)
-#jooin all commands as single line separated with &&
-$bashCommand = $bashCommands -join ' && '
-ssh "vyos@$VyOSExternalIP" $bashCommand
+    $scriptfile = 'intconfigure.sh'
+    #build bash command
+    $bashCommands = @(
+        'mkdir -p ~/.scripts'
+        'chmod 700 ~/.scripts'
+        "rm -f ~/.scripts/$scriptfile"
+        "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
+        'rm -f ~/tmp.sh'
+        "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
+        "chmod u+x ~/.scripts/$scriptfile"
+        "sg vyattacfg -c ~/.scripts/$scriptfile"
+    )
+    #join all commands as single line separated with &&
+    $bashCommand = $bashCommands -join ' && '
+    ssh "vyos@$VyOSExternalIP" $bashCommand
 
-write-Host 
-Write-Host "vyos is rebooting...." -ForegroundColor Gray
-#endregion
+    write-Host 
+    Write-Host "vyos is rebooting...." -ForegroundColor Gray
+    #endregion
+}
+Else{
+    $VyOSLanCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoslansetup.txt"}
+    #region Copy Paste Mode
+    Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n or" -ForegroundColor Yellow
+    Write-Host "`nCopy code from $PSScriptRoot\Logs\vyoslansetup.txt" -ForegroundColor Yellow
+    Write-Host $VyOSLanCmd -ForegroundColor Gray
+
+    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in console or ssh session:`n" -ForegroundColor Yellow
+    Write-Host "reboot now" -ForegroundColor Gray
+    #endregion
+}
 
 Stop-Transcript

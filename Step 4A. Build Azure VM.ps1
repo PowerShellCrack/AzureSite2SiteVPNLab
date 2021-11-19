@@ -22,7 +22,8 @@ If(-Not(Get-AzStorageAccount -ResourceGroupName $AzureSimpleConfig.ResourceGroup
     #build random char for storage name
     $Global:randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
     $storageName = ($RegionBName +'-' + $Global:randomChar).ToLower() -replace '[\W]', ''
-    $storageAcc = New-AzStorageAccount -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $storageName -SkuName $AzureSimpleConfig.StorageSku -Location $AzureSimpleConfig.LocationName -Kind Storage -verbose
+    $storageAcc = New-AzStorageAccount -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $storageName -SkuName $AzureSimpleConfig.StorageSku `
+                            -Location $AzureSimpleConfig.LocationName -Kind Storage -verbose
 }
 #endregion
 
@@ -33,16 +34,19 @@ $VNET = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VNETName -ResourceGroupNam
 If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
 
     $NSG = New-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -Verbose
-    $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound -Verbose | Set-AzNetworkSecurityGroup
+    $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
+                    -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound -Verbose | Set-AzNetworkSecurityGroup
 
     
-    Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $VNET -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue
+    Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $VNET -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix `
+                -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue
     $VNET | Set-AzVirtualNetwork -WarningAction SilentlyContinue
 }
 #endregion
 
 #region Attach VM to second subnet which should be defaultsubnet
-$NIC = New-AzNetworkInterface -Name $AzureSimpleVM.NICName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -SubnetId $Vnet.Subnets[1].Id
+$NIC = New-AzNetworkInterface -Name $AzureSimpleVM.NICName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName `
+                -SubnetId $Vnet.Subnets[1].Id
 #endregion
 
 #region Build local admin credentials for VM
@@ -52,7 +56,8 @@ $Credential = New-Object System.Management.Automation.PSCredential ($AzureSimple
 
 #region Build VM configurations
 $VirtualMachine = New-AzVMConfig -VMName $AzureSimpleVM.Name -VMSize $AzureSimpleVM.Size
-$VirtualMachine = Set-AzVMOperatingSystem -VM $VirtualMachine -Windows -ComputerName $AzureSimpleVM.ComputerName -Credential $Credential -ProvisionVMAgent -EnableAutoUpdate
+$VirtualMachine = Set-AzVMOperatingSystem -VM $VirtualMachine -Windows -ComputerName $AzureSimpleVM.ComputerName -Credential $Credential `
+                            -ProvisionVMAgent -EnableAutoUpdate
 $VirtualMachine = Add-AzVMNetworkInterface -VM $VirtualMachine -Id $NIC.Id
 $VirtualMachine = Set-AzVMSourceImage -VM $VirtualMachine -PublisherName 'MicrosoftWindowsServer' -Offer 'WindowsServer' -Skus '2016-Datacenter' -Version latest
 #endregion
@@ -68,7 +73,8 @@ If($AzureSimpleVM.EnableAutoshutdown){
     $URLRegex = '(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)'
     If($AzureSimpleVM.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam = @{Email=$AzureSimpleVM.AutoShutdownNotificationType}}
     If($AzureSimpleVM.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam =@{WebhookUrl=$AzureSimpleVM.AutoShutdownNotificationType}}
-    Set-AzVMAutoShutdown -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleVM.Name -Enable -Time $AzureSimpleVM.ShutdownTime -TimeZone $AzureSimpleVM.ShutdownTimeZone @ShutdownParam
+    Set-AzVMAutoShutdown -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleVM.Name -Enable -Time $AzureSimpleVM.ShutdownTime `
+                -TimeZone $AzureSimpleVM.ShutdownTimeZone @ShutdownParam
 }
 #endregion
 
@@ -100,13 +106,15 @@ $extensionParams = @{
 }
 #add enablevmaccess back with new creds
 Set-AzVMAccessExtension @extensionParams
-#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureSimpleConfig.LocationName
+#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name `
+            -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureSimpleConfig.LocationName
 Update-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VM $VM
 Restart-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleVM.Name
 
-#>
 #Reset the Remote Desktop Services configuration
-#Set-AzVMAccessExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name "VMRDPAccess" -Location $AzureSimpleConfig.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
+#Set-AzVMAccessExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name "VMRDPAccess" `
+            -Location $AzureSimpleConfig.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
+#>
 #endregion
 
 #get all VMs and their IP's

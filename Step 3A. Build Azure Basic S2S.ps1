@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 #endregion
 
 #region start transcript
-$LogfileName = "$RegionName-BasicSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$RegionName-AzureSimpleS2S-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 #endregion
 
@@ -38,7 +38,8 @@ $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix
 $subnet2 = New-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
 
 #Create the VNet
-New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2
+New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+    -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2
 
 #add a gateway subnet to a virtual network you have already created
 $vnet = Get-AzVirtualNetwork -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleConfig.VnetName
@@ -48,11 +49,13 @@ Set-AzVirtualNetwork -VirtualNetwork $vnet
 
 #region 2. Create the local network gateway
 #add a local network gateway with a single address prefix:
-New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $AzureSimpleConfig.LocalSubnetPrefix 
+New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix 
 #endregion
 
 #region 3. Request a Public IP address
-$gwpip= New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic
+$gwpip= New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+    -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic
 #endregion
 
 #region 4. Create the gateway IP addressing configuration
@@ -63,7 +66,8 @@ $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name gwipconfig1 -SubnetId $s
 
 #region 5. Create the VPN gateway
 #this can take up to 40 minutes (eg: started at 4:15; ended at 4:39)
-New-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1
+New-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+    -Location $AzureSimpleConfig.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1
 #endregion
 
 #region 6 & 7. Create the VPN connection
@@ -73,7 +77,9 @@ $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName
 $Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
 
 #Create the connection
-New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey
+New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+        -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+        -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey
 #endregion
 
 #region 8. Verify the VPN connection
@@ -152,41 +158,57 @@ commit
 save
 "@
 
-#build script for router
-#https://docs.vyos.io/en/crux/automation/command-scripting.html
-'#!/bin/vbash' | Set-Content $env:temp\vyos.script
-'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
-'' | Add-Content $env:temp\vyos.script
-$VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
-'exit' | Add-Content $env:temp\vyos.script
-'run restart vpn' | Add-Content $env:temp\vyos.script
-'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
-#'' | Add-Content $env:temp\vyos.script
-#'run reboot now' | Add-Content $env:temp\vyos.script
-#get-content $env:temp\vyos.script
 
-#copy script to vyos router
-$remoteSSHServerLogin = "vyos@$VyOSExternalIP"
-scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
+If($RouterAutomationMode){
+    #region Automation Mode
+    #build script for router
+    #https://docs.vyos.io/en/crux/automation/command-scripting.html
+    '#!/bin/vbash' | Set-Content $env:temp\vyos.script
+    'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
+    '' | Add-Content $env:temp\vyos.script
+    $VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
+    'exit' | Add-Content $env:temp\vyos.script
+    'run restart vpn' | Add-Content $env:temp\vyos.script
+    'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
+    #'' | Add-Content $env:temp\vyos.script
+    #'run reboot now' | Add-Content $env:temp\vyos.script
+    #get-content $env:temp\vyos.script
+
+    #copy script to vyos router
+    $remoteSSHServerLogin = "vyos@$VyOSExternalIP"
+    scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
 
 
-$scriptfile = 'basics2svpn.sh'
-#build bash command
-$bashCommands = @(
-    'mkdir -p ~/.scripts'
-    'chmod 700 ~/.scripts'
-    "rm -f ~/.scripts/$scriptfile"
-    "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
-    'rm -f ~/tmp.sh'
-    "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
-    "chmod u+x ~/.scripts/$scriptfile"
-    "sg vyattacfg -c ~/.scripts/$scriptfile"
-)
-#jooin all commands as single line separated with &&
-$bashCommand = $bashCommands -join ' && '
-ssh "vyos@$VyOSExternalIP" $bashCommand
+    $scriptfile = 'basics2svpn.sh'
+    #build bash command
+    $bashCommands = @(
+        'mkdir -p ~/.scripts'
+        'chmod 700 ~/.scripts'
+        "rm -f ~/.scripts/$scriptfile"
+        "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
+        'rm -f ~/tmp.sh'
+        "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
+        "chmod u+x ~/.scripts/$scriptfile"
+        "sg vyattacfg -c ~/.scripts/$scriptfile"
+    )
+    #jooin all commands as single line separated with &&
+    $bashCommand = $bashCommands -join ' && '
+    ssh "vyos@$VyOSExternalIP" $bashCommand
 
-write-Host 
-Write-Host "vyos is rebooting...." -ForegroundColor Gray
+    write-Host 
+    Write-Host "vyos is rebooting...." -ForegroundColor Gray
+    #endregion
+}
+Else{
+    $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2ssimplesetup.txt"}
+    #region Copy Paste Mode
+    Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n or" -ForegroundColor Yellow
+    Write-Host "`nCopy code from $PSScriptRoot\Logs\vyoss2ssimplesetup.txt" -ForegroundColor Yellow
+    Write-Host $VyOSFinal -ForegroundColor Gray
+
+    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in console or ssh session:`n" -ForegroundColor Yellow
+    Write-Host "reboot now" -ForegroundColor Gray
+    #endregion
+}
 
 Stop-Transcript
