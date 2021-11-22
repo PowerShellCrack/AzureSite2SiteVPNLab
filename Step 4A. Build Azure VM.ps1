@@ -1,8 +1,18 @@
 $ErrorActionPreference = "Stop"
 
 #region Grab Configurations
-. "$PSScriptRoot\Configs.ps1"
+If($PSScriptRoot.ToString().length -eq 0)
+{
+     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Break
+}
+Else{
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
+    . "$PSScriptRoot\configs.ps1"
+}
 #endregion
+
 
 #start transcript
 $LogfileName = "$RegionName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"

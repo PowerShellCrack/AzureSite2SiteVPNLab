@@ -9,7 +9,7 @@
         1. Creates New VHD file
         2. Create new General 1 VM and attached the VHD
         3. Mounts vyOS IOS to VM
-        4. COnfogures Hyper-V networks for VLANID
+        4. Configures Hyper-V networks for VLANID
         5. Boots VM and requires manual input for install
         6. Unmounts ISO, Reboots VM and requires lan setup
         7. Setup external network and SSH
@@ -19,8 +19,18 @@
 
 #https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
 #region Grab Configurations
-. "$PSScriptRoot\Configs.ps1"
+If($PSScriptRoot.ToString().length -eq 0)
+{
+     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+     Write-Host ("    Run configuration file first (eg: . .\Configs.ps1 -NoAzureCheck)") -ForegroundColor Yellow
+     Break
+}
+Else{
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
+    . "$PSScriptRoot\Configs.ps1" -NoAzureCheck
+}
 #endregion
+
 
 #start transcript
 $LogfileName = "$RegionAName-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
@@ -28,42 +38,64 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 #region Create VyOS VM
+If(-Not(Test-Path $VyOSConfig.ISOLocation)){Write-Host ("Unable to find VyOS ISO: [{0}]. Please update config and rerun setup" -f $VyOSConfig.ISOLocation) -ForegroundColor Red;Break}
+
 If($null -eq $VM){
+    $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
     Try{
-        New-VHD -Path ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx') -SizeBytes 2GB -Dynamic
-        New-VM -Name $VyOSConfig.VMName -VHDPath ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx') `
-            -SwitchName $VyOSConfig.ExternalInterface -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop
-        #Connect ISO
-        Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation
+        If(Get-VHD -Path $VHDxFilePath  ){
+            Remove-Item $VHDxFilePath  -Confirm -Force -ErrorAction Stop
+        }
+        New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop
     }
     Catch{
-        Write-Host ("Unable to build the VM: [{0}]. Error {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Red
+        Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Red
+        Break
+    }
+
+    Try{
+        $VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
+
+        New-VM -Name $VyOSConfig.VMName -VHDPath $VHDxFilePath  `
+            -SwitchName $VmSwitchExternal -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop
+        Set-VM -Name $VyOSConfig.VMName -AutomaticCheckpointsEnabled $false -Notes 'StartupOrder: 1' `
+            -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
+            -DynamicMemory -ErrorAction Stop
+        Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
+        #Connect ISO
+        Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
+
+        #$VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
+        #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Connect-VMNetworkAdapter -SwitchName $VmSwitchExternal -ErrorAction Stop
+    }
+    Catch{
+        Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Red
         Break
     }
 }
-Else{   
+Else{
     Write-Host ("VM Already created named [{0}]." -f $VM.Name) -ForegroundColor Green
 }
-
+#endregion
 
 #Trunk HyperV Network for internal networks; determine if VLAN needs to be used.
 #https://docs.microsoft.com/en-us/powershell/module/hyper-v/set-vmnetworkadaptervlan?view=windowsserver2019-ps
 If($HyperVConfig.ConfigureForVLAN)
 {
-    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | 
+    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
         Set-VMNetworkAdapterVlan -Trunk -NativeVlanId $HyperVConfig.VLANID -AllowedVlanIdList $VyOSConfig.AllowedvLanIdRange
 }
 Else{
-    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VyOSConfig.ExternalInterface} | 
+    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
         Set-VMNetworkAdapterVlan -Untagged
 }
-#Get-VMNetworkAdapterVlan -VMName $VyOSConfig.VMName
 
+
+#start VM
 If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop}
 Write-Host "Configuring router for inital settings..." -ForegroundColor Gray
 
-
-Start-Sleep 10
+Start-Sleep 30
 #endregion
 
 #region INSTALL VyOS
@@ -72,19 +104,19 @@ $VyOSSteps = @"
 You will be Loading an image onto the Virtual Machine router
 Connect to router and answer the questions below on the VM
 =======================================
- VyOS login: vyos
- Password: vyos
- VyOS@VyOS:~$ install image
- Would you like to continue? (Yes/No) [Yes]: [Enter]
- Partition (Auto/Parted/Skip) [Auto]: [Enter]
- Install the image on? [sda]: [Enter]
- Continue? (Yes/No) [No]: Yes
- How big of a root partition should I create? (1000MB - 2147MB) [2147]MB: [Enter]
- What would you like to name this image? [1.1.8]: [Enter]
- Which one should I copy to sda? [/config/config.boot]: [Enter]
- Enter password for user 'VyOS': [Choose a password]
- Retype password for user 'VyOS': [New password]
- Which drive should GRUB modify the boot partition on? [sda]: [Enter]
+  VyOS login: vyos
+  Password: vyos
+  VyOS@VyOS:~$ install image
+  Would you like to continue? (Yes/No) [Yes]: [Enter]
+  Partition (Auto/Parted/Skip) [Auto]: [Enter]
+  Install the image on? [sda]: [Enter]
+  Continue? (Yes/No) [No]: Yes
+  How big of a root partition should I create? (1000MB - 2147MB) [2147]MB: [Enter]
+  What would you like to name this image? [1.1.8]: [Enter]
+  Which one should I copy to sda? [/config/config.boot]: [Enter]
+  Enter password for user 'VyOS': [Choose a password]
+  Retype password for user 'VyOS': [New password]
+  Which drive should GRUB modify the boot partition on? [sda]: [Enter]
 "@
 
 do {
@@ -97,7 +129,7 @@ Write-Host "Configuring router for next configurations..." -ForegroundColor Gray
 Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-
+Start-Sleep 30
 #endregion
 
 #region Setup VyOS SSH
@@ -106,16 +138,16 @@ $VyOSSteps = @"
 You will be enabling SSH on the Virtual Machine router
 Connect to router and answer the questions below on the VM
 =======================================
-VyOS Base Configuration
-VyOS login: vyos
-Password: [New password]
-VyOS@VyOS:~$ configure
-VyOS@VyOS# set interfaces ethernet eth0 address dhcp
-VyOS@VyOS# set service ssh port '22'
-VyOS@VyOS# commit
-VyOS@VyOS# save
-VyOS@VyOS# exit
-VyOS@VyOS:~$ show int
+  vyos Base Configuration
+  vyos login: vyos
+  Password: [New password]
+  vyos@vyos:~$ configure
+  vyos@vyos# set interfaces ethernet eth0 address dhcp
+  vyos@vyos# set service ssh port 22
+  vyos@vyos# commit
+  vyos@vyos# save
+  vyos@vyos# exit
+  vyos@vyos:~$ show int
 "@
 
 do {
@@ -157,7 +189,7 @@ ForEach($net in $VyOSNetworks) {
     }
     Else{
         Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $net.Name -ErrorAction Stop
-        Write-Host ("Attached network [{0}] is to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
+        Write-Host ("Attached network [{0}] to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
     }
 }
 
@@ -166,7 +198,6 @@ Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 #wait for VM to boot completely
 Start-Sleep 30
 #endregion
-
 
 #region Build VyOS Lan Configuration Commands
 $VyOSLanCmd = @"
@@ -185,17 +216,15 @@ set interfaces ethernet eth0 description 'External'
 set service dns forwarding cache-size '0'
 "@
 $i=1
-#TEST $SubnetCIDR = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name |Select -first 1
+#TEST $SubnetCIDR = ($VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)[0]
 foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
-    $Subnet = $SubnetCIDR.Name.Split("/")[0]
-    $mask = $SubnetCIDR.Name.Split("/")[1]
     $Description = ("{0} for {1}" -f $vYosConfig.NetPrefix,$VyOSConfig.LocalSubnetPrefix[$SubnetCIDR.Name])
-    $IPInfo = Get-NetworkStartEndAddress $Subnet -Prefix $mask
-    $GatewayInfo = Get-TypicalIPRange -StartIP $IPInfo.StartingIP -EndIP $IPInfo.EndingIP -Gateway Last
+    $IPInfo = Get-NetworkDetails -CidrAddress $SubnetCIDR.Name
+    $GatewayInfo = Get-TypicalRouterRange -StartIP $IPInfo.StartingIP -EndIP $IPInfo.EndingIP -Gateway $IPInfo.SubnetMask -Position Last
     $VyOSLanCmd += @"
 `n
 #Interface $i Configuration
-set interfaces ethernet eth$i address $($IPInfo.EndingIP)/$mask
+set interfaces ethernet eth$i address $($IPInfo.EndingIP)/$($IPInfo.Prefix)
 set interfaces ethernet eth$i description '$Description'
 set service dns forwarding listen-on 'eth$i'
 "@
@@ -292,54 +321,25 @@ save
 
 If($RouterAutomationMode){
     #region Automation Mode
+    $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot
+
     #temporary set auto logon ssh keys
     New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
-    
-    #build script for router
-    #https://docs.vyos.io/en/crux/automation/command-scripting.html
-    '#!/bin/vbash' | Set-Content $env:temp\vyos.script
-    'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
-    '' | Add-Content $env:temp\vyos.script
-    $VyOSLanCmd -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
-    'exit' | Add-Content $env:temp\vyos.script
-    'run show int' | Add-Content $env:temp\vyos.script
-    '' | Add-Content $env:temp\vyos.script
-    'run reboot now' | Add-Content $env:temp\vyos.script
-    #get-content $env:temp\vyos.script
 
-    #copy script to vyos router
-    $remoteSSHServerLogin = "vyos@$VyOSExternalIP"
-    scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
-
-    $scriptfile = 'intconfigure.sh'
-    #build bash command
-    $bashCommands = @(
-        'mkdir -p ~/.scripts'
-        'chmod 700 ~/.scripts'
-        "rm -f ~/.scripts/$scriptfile"
-        "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
-        'rm -f ~/tmp.sh'
-        "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
-        "chmod u+x ~/.scripts/$scriptfile"
-        "sg vyattacfg -c ~/.scripts/$scriptfile"
-    )
-    #join all commands as single line separated with &&
-    $bashCommand = $bashCommands -join ' && '
-    ssh "vyos@$VyOSExternalIP" $bashCommand
-
-    write-Host 
-    Write-Host "vyos is rebooting...." -ForegroundColor Gray
-    #endregion
+    Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Execute -Verbose
 }
 Else{
     $VyOSLanCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoslansetup.txt"}
     #region Copy Paste Mode
-    Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n or" -ForegroundColor Yellow
-    Write-Host "`nCopy code from $PSScriptRoot\Logs\vyoslansetup.txt" -ForegroundColor Yellow
+    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
+    Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoslansetup.txt" -ForegroundColor Yellow
+    Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSLanCmd -ForegroundColor Gray
-
-    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in console or ssh session:`n" -ForegroundColor Yellow
-    Write-Host "reboot now" -ForegroundColor Gray
+    Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
+    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
+    Write-Host "Run this command last in ssh session: " -ForegroundColor Gray -NoNewline
+    Write-Host "reboot now" -ForegroundColor Yellow
     #endregion
 }
 

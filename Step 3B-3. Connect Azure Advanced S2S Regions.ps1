@@ -1,8 +1,19 @@
 # set error preference
 $ErrorActionPreference = "Stop"
 
-#dot source configuration file
-. "$PSScriptRoot\Configs.ps1"
+#region Grab Configurations
+If($PSScriptRoot.ToString().length -eq 0)
+{
+     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Break
+}
+Else{
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
+    . "$PSScriptRoot\configs.ps1"
+}
+#endregion
+
 
 #start transcript
 $LogfileName = "SiteAtoBConn-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"

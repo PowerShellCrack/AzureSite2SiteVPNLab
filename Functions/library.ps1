@@ -15,17 +15,15 @@ Function Connect-AzureEnvironment{
         [Parameter(Mandatory = $false,
             Position = 1,
             ParameterSetName = 'IDParameterSet')]
-        [string]$SubscriptionID ,
-
-        [Parameter(Mandatory = $false,
-            Position = 2)]
-        [string]$ResourceGroupName,
-
-        [switch]$ClearAll
+        [string]$SubscriptionID
     )
     Begin{
         ## Get the name of this function
         [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+
+        #build log name
+        [string]$FileName = 'Profile_' + ${CmdletName} + '_' + (get-date -Format MM-dd-yyyy) + '.log'
+        Start-Transcript -Path $env:TEMP\$FileName -Force -Append | Out-Null
 
         if (-not $PSBoundParameters.ContainsKey('Verbose')) {
             $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
@@ -44,35 +42,22 @@ Function Connect-AzureEnvironment{
             $global:MySubscriptionName = $SubscriptionName
         }
 
-        #overwrite global resource group is parameter is called
-        if ($PSBoundParameters.ContainsKey('ResourceGroupName')) {
-            $global:MyResourceGroup = $ResourceGroupName
+        Try{
+            #grab current AZ resources
+            $Context = Get-AzContext -ErrorAction Stop
+            $DefaultRG = Get-AzDefault -ErrorAction Stop
+            #if default is not set, attempt to set it
+            If($DefaultRG)
+            {
+                $DefaultRG = Set-AzDefault
+            }
         }
-
-        If($ClearAll){
-            Write-host ("There was an issue signing into Azure. Resetting and attempting again...") -ForegroundColor yellow
+        Catch{
+            Write-host ("Failed to get Azure context. {0}" -f $_.Exception.Message) -ForegroundColor yellow
             Clear-AzDefault -ErrorAction SilentlyContinue -Force
             Clear-AzContext -ErrorAction SilentlyContinue -Force
             Disconnect-AzAccount -ErrorAction SilentlyContinue
         }
-        Else{
-            Try{
-                #grab current AZ resources
-                $Context = Get-AzContext -ErrorAction Stop
-                #if defualt is not set, attempt to set it
-                If($null -eq (Get-AzDefault) )
-                {
-                    $DefaultRG = Set-AzDefault -ResourceGroupName $global:MyResourceGroup -Force
-                }Else{
-                    $DefaultRG = Get-AzDefault -ErrorAction Stop
-                }
-            }Catch{
-                Write-host ("Failed to get Azure context. {0}" -f $_.Exception.Message) -ForegroundColor yellow
-            }
-        }
-
-        $MySubscriptions = @()
-        $MyRGs = @()
 
         If($VerbosePreference){Write-Host ''}
     }
@@ -87,7 +72,7 @@ Function Connect-AzureEnvironment{
                 }Else{
                     $AzAccount = Connect-AzAccount -ErrorAction Stop
                 }
-                Write-Host "You must select an Azure Subscription"
+
                 $AzSubscription += Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
                 Set-AzContext -Tenant $AzSubscription.Subscription.TenantId -Subscription $AzSubscription.Subscription.id | Out-Null
                 If($VerbosePreference){Write-Host ("Successfully connected to Azure!") -ForegroundColor Green}
@@ -104,11 +89,19 @@ Function Connect-AzureEnvironment{
             #To suppress these warning messages
             Write-Verbose ("Suppressing Azure Powershell change warnings...")
             Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+
+            #set the global values if connection
+            If($AzSubscription){
+                $global:MySubscriptionName = $AzSubscription.Subscription.Name;
+                $global:MySubscriptionID = $AzSubscription.Subscription.Id;
+                $global:MyTenantID = $AzSubscription.Subscription.TenantId;
+            }
         }
     }
     End{
         #once logged in, set defaults context
         Get-AzContext
+        Stop-Transcript | Out-Null
     }
 
 }
@@ -140,7 +133,7 @@ Function Set-AzVMAutoShutdown{
         The time of day the schedule will occur.
 
     .PARAMETER TimeZone
-        The timezone 
+        The timezone
 
     .PARAMETER WebhookUrl
         The webhook URL to which the notification will be sent.
@@ -231,7 +224,7 @@ Function Set-AzVMAutoShutdown{
             if ([string]::IsNullOrEmpty($WebhookUrl) -ne $true) { $notificationsettings.Add("WebhookUrl", $WebhookUrl) }
 
             # Add the recipient email address if it is defined
-            if ([string]::IsNullOrEmpty($Email) -ne $true) { 
+            if ([string]::IsNullOrEmpty($Email) -ne $true) {
                 $notificationsettings.Add("emailRecipient", $Email)
                 $notificationsettings.Add("notificationLocale", "en")
             }
@@ -300,249 +293,6 @@ Function New-SharedPSKey{
     }
 }
 
-Function Test-IPAddress ($strIP)
-{
-	# ensure we have a valid IP address
-    Try{
-        [IPAddress]$IP = $strIP;
-        $bValidIP = $true
-    }
-    Catch{
-        $bValidIP = $false
-    }
-	Return $bValidIP
-}
-
-Function ConvertTo-Binary ($strDecimal)
-{
-	$strBinary = [Convert]::ToString($strDecimal, 2)
-	if ($strBinary.length -lt 8)
-	{
-		while ($strBinary.length -lt 8)
-		{
-			$strBinary = "0"+$strBinary
-		}
-	}
-	Return $strBinary
-}
-
-Function ConvertTo-IPv4Binary ($strIP)
-{
-	$strBinaryIP = $null
-	if (Test-IPAddress $strIP)
-	{
-		$arrSections = @()
-		$arrSections += $strIP.split(".")
-		foreach ($section in $arrSections)
-		{
-			if ($strBinaryIP -ne $null)
-			{
-				$strBinaryIP = $strBinaryIP+"."
-			}
-				$strBinaryIP = $strBinaryIP+(ConvertTo-Binary $section)
-		}
-	}
-	Return $strBinaryIP
-}
-
-Function ConvertTo-IPv4MaskBinary ($strSubnetMask)
-{
-		$strBinarySubnetMask = $null
-	if (Test-IPv4MaskString $strSubnetMask)
-	{
-		$arrSections = @()
-		$arrSections += $strSubnetMask.split(".")
-		foreach ($section in $arrSections)
-		{
-			if ($strBinarySubnetMask -ne $null)
-			{
-				$strBinarySubnetMask = $strBinarySubnetMask+"."
-			}
-				$strBinarySubnetMask = $strBinarySubnetMask+(ConvertTo-Binary $section)
-		}
-	}
-	Return $strBinarySubnetMask
-}
-
-Function ConvertFrom-IPv4Binary ($BinaryIP)
-{
-	$FirstSection = [Convert]::ToInt64(($BinaryIP.substring(0, 8)),2)
-	$SecondSection = [Convert]::ToInt64(($BinaryIP.substring(8,8)),2)
-	$ThirdSection = [Convert]::ToInt64(($BinaryIP.substring(16,8)),2)
-	$FourthSection = [Convert]::ToInt64(($BinaryIP.substring(24,8)),2)
-	$strIP = "$FirstSection`.$SecondSection`.$ThirdSection`.$FourthSection"
-	Return $strIP
-}
-
-Function ConvertTo-IPv4MaskString {
-  param(
-    [Parameter(Mandatory = $true)]
-    [ValidateRange(0, 32)]
-    [Int] $MaskBits
-  )
-  $mask = ([Math]::Pow(2, $MaskBits) - 1) * [Math]::Pow(2, (32 - $MaskBits))
-  $bytes = [BitConverter]::GetBytes([UInt32] $mask)
-  (($bytes.Count - 1)..0 | ForEach-Object { [String] $bytes[$_] }) -join "."
-}
-
-Function Test-IPv4MaskString {
-  param(
-    [Parameter(Mandatory = $true)]
-    [String] $MaskString
-  )
-  $validBytes = '0|128|192|224|240|248|252|254|255'
-  $MaskString -match `
-    ('^((({0})\.0\.0\.0)|'      -f $validBytes) +
-    ('(255\.({0})\.0\.0)|'      -f $validBytes) +
-    ('(255\.255\.({0})\.0)|'    -f $validBytes) +
-    ('(255\.255\.255\.({0})))$' -f $validBytes)
-}
-
-Function ConvertTo-IPv4MaskBits {
-  param(
-    [parameter(Mandatory = $true)]
-    [ValidateScript({Test-IPv4MaskString $_})]
-    [String] $MaskString
-  )
-  $mask = ([IPAddress] $MaskString).Address
-  for ( $bitCount = 0; $mask -ne 0; $bitCount++ ) {
-    $mask = $mask -band ($mask - 1)
-  }
-  $bitCount
-}
-
-Function Get-NetworkStartEndAddress{
-    Param (
-        [Parameter(Mandatory=$true,Position=0)]
-        [ValidateScript({Test-IPAddress $_})]
-        [string]$IPAddress,
-        [Parameter(Mandatory=$true,ParameterSetName="Subnet")]
-        [ValidateScript({Test-IPv4MaskString $_})]
-        [string]$SubnetMask,
-        [Parameter(Mandatory=$true,ParameterSetName="Prefix")]
-        [ValidateRange(16,30)]
-        [int]$Prefix
-    )
-
-    If($PSBoundParameters.ContainsKey('SubnetMask')){
-        $BinarySubnetMask = (ConvertTo-IPv4MaskBinary $SubnetMask).replace(".", "")
-	    $BinaryNetworkAddressSection = $BinarySubnetMask.replace("1", "")
-        $CIDR = ConvertTo-IPv4MaskBits $SubnetMask
-    }
-
-    If($PSBoundParameters.ContainsKey('Prefix')){
-        $CIDR = $Prefix
-        $SubnetMask = ConvertTo-IPv4MaskString -MaskBits $Prefix
-        $BinarySubnetMask = (ConvertTo-IPv4MaskBinary $SubnetMask).replace(".", "")
-	    $BinaryNetworkAddressSection = $BinarySubnetMask.replace("1", "")
-    }
-
-    $BinaryNetworkAddressLength = $BinaryNetworkAddressSection.length
-	$iAddressPool = $iAddressWidth -2
-	$BinaryIP = (ConvertTo-IPv4Binary $IPAddress).Replace(".", "")
-	$BinaryIPNetworkSection = $BinaryIP.substring(0, $CIDR)
-	$BinaryIPAddressSection = $BinaryIP.substring($CIDR, $BinaryNetworkAddressLength)
-
-	#Starting IP
-	$FirstAddress = $BinaryNetworkAddressSection -replace "0$", "1"
-	$strFirstIP = ConvertFrom-IPv4Binary ($BinaryIPNetworkSection + $FirstAddress)
-
-	#End IP
-	$LastAddress = ($BinaryNetworkAddressSection -replace "0", "1") -replace "1$", "0"
-	$strLastIP = ConvertFrom-IPv4Binary ($BinaryIPNetworkSection + $LastAddress)
-
-    #build NetworkInfo object
-    $NetworkInfo = New-Object -TypeName PSObject
-    Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name IPAddress -Value $IPAddress
-    Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name SubnetMask -Value $SubnetMask
-    Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name StartingIP -Value $strFirstIP
-    Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name EndingIP -Value $strLastIP
-    Add-Member -InputObject $NetworkInfo -MemberType NoteProperty -Name Prefix -Value $CIDR
-
-    return $NetworkInfo
-}
-
-#http://get-powershell.com/post/2010/01/29/Determining-if-IP-addresses-are-on-the-same-subnet.aspx
-Function Test-SameSubnet {
-    param (
-    [parameter(Mandatory=$true,Position=0)]
-    [Net.IPAddress]
-    $ip1,
-
-    [parameter(Mandatory=$true,Position=1)]
-    [Net.IPAddress]
-    $ip2,
-
-    [parameter(Mandatory=$false,Position=2)]
-    [alias("SubnetMask")]
-    [Net.IPAddress]
-    $mask ="255.255.255.0"
-    )
-
-    if (($ip1.address -band $mask.address) -eq ($ip2.address -band $mask.address)) {$true}
-    else {$false}
-
-}
-
-Function Get-TypicalIPRange {
-    param (
-    [Parameter(Mandatory=$true,Position=0)]
-    [ValidateScript({Test-IPAddress $_})]
-    [string]$StartIP,
-    [Parameter(Mandatory=$true,Position=1)]
-    [ValidateScript({Test-IPAddress $_})]
-    [string]$EndIP,
-    [Parameter(Mandatory=$true,Position=2)]
-    [ValidateSet('Front','Last')]
-    [string]$Gateway 
-    )
-
-    If(Test-SameSubnet $StartIP $EndIP){
-
-        switch($Gateway){
-         'Front' {
-            $Ip2 = $StartIP.Split('.')
-            If($ip2[-1] -eq 0){
-                #for gateway add 1
-                $Ip2[-1] = [int]$Ip2[-1] + 1
-                $GatewayIP = $ip2 -join '.'
-
-                #for start add another (2)
-                $Ip2[-1] = [int]$Ip2[-1] + 1
-                $NewStartIP = $Ip2 -join '.'
-            }
-            Else{
-                #for start IP; add 1
-                $Ip2[-1] = [int]$Ip2[-1] + 1
-                $NewStartIP = $Ip2 -join '.'
-
-                #use given IP as gatway
-                $GatewayIP = $StartIP
-            }
-            $NewEndIP =$EndIP
-
-         }
-
-         'Last'  {
-            #subject 1 from last IP octet
-            $Ip2 = $EndIP.Split('.')
-            $Ip2[-1] = [int]$Ip2[-1]-1
-            $NewEndIP = $Ip2 -join '.'
-            $GatewayIP = $EndIP
-            $NewStartIP = $StartIP
-            }
-
-        }
-
-        #build NetworkInfo object
-        $GatewayInfo = New-Object -TypeName PSObject
-        Add-Member -InputObject $GatewayInfo -MemberType NoteProperty -Name GatewayIP -Value $GatewayIP
-        Add-Member -InputObject $GatewayInfo -MemberType NoteProperty -Name StartIP -Value $NewStartIP
-        Add-Member -InputObject $GatewayInfo -MemberType NoteProperty -Name EndIP -Value $NewEndIP 
-    }
-    return $GatewayInfo
-
-}
 
 Function Set-TruncateString{
     param (
@@ -554,151 +304,5 @@ Function Set-TruncateString{
 
     process{
         $str.subString(0, [System.Math]::Min($length, $str.Length))
-    }
-}
-
-#region clean all old variables
-Function Clear-NonBultinVariables{
-    #Invoke a new instance of PowerShell, get the built-in variables, then remove everything else that doesn't belong.
-    $ps = [PowerShell]::Create()
-    $ps.AddScript('Get-Variable | Select-Object -ExpandProperty Name') | Out-Null
-    $builtIn = $ps.Invoke()
-    $ps.Dispose()
-    $builtIn += "profile","psISE","psUnsupportedConsoleApplications" # keep some ISE-specific stuff
-    Remove-Variable (Get-Variable | Select-Object -ExpandProperty Name | Where-Object {$builtIn -NotContains $_}) -ErrorAction SilentlyContinue
-}
-#endregion
-
-#region clean all old variables
-Function Remove-OutdatedModules{
-    param (
-        [Parameter(Mandatory=$false,Position=0,ValueFromPipeline=$true)]
-        [string[]]$module
-    )
-    Begin{
-        If($PSBoundParameters.ContainsKey('module')){
-            $Param = @{
-                Name = $module
-                AllVersions = $true
-            }
-            $mods = Get-InstalledModule @Param
-        }
-        Else{
-            $mods = Get-InstalledModule
-        }
-        Write-Host "Found $($mod.count) installed modules"
-    }
-    Process{
-        foreach ($mod in $mods){
-            Write-Host ("Checking {0}..." -f $mod.name) -NoNewline
-            $latest = Get-InstalledModule $mod.name
-            $specificmods = Get-InstalledModule $mod.name -AllVersions
-            Write-Host ("{0} versions of this module found" -f ($specificmods.version).count)
-
-            foreach ($sm in $specificmods)
-            {
-                if ($sm.version -ne $latest.version)
-	            {
-	                write-host ("Uninstalling {0} - {1} [latest is {2}]..." -f $sm.name,$sm.version,$latest.version) -NoNewline
-	                $sm | Uninstall-Module -force
-	                Write-Host "Done"
-	            }
-
-            }
-        }
-    }
-
-}
-#endregion
-
-Function New-SSHSharedKey{
-	<#
-    .SYNOPSIS
-    Generate Pre-shared key for SSH authentication
-
-    .DESCRIPTION
-    Generate Pre-shared key for SSH authentication to the remote device
-
-    .PARAMETER DestinationIP
-    Mandatory. Must specify destination IP
-
-    .PARAMETER User
-    Specify user for ssh; defaults to root
-
-    .PARAMETER Force
-    Overwrite current ssh key
-
-    .EXAMPLE
-    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
-
-    .LINK
-    http://vcloud-lab.com/entries/devops/How-to-Setup-Passwordless-SSH-Login-on-Windows
-    #>
-	[CmdletBinding(
-		SupportsShouldProcess=$True,
-		ConfirmImpact='Medium',
-		HelpURI='http://vcloud-lab.com',
-		DefaultParameterSetName='Manual'
-	)]
-
-	param
-	(
-        [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true)]
-		[string]$DestinationIP,
-		[string]$User = 'root',
-		[switch]$Force
-	)
-
-    Begin{
-        $oldLocation = Get-Location
-    	Set-Location -Path $env:USERPROFILE
-
-        try{Start-Process ssh -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SSHinstalled =$true}Catch{$SSHinstalled =$false}
-        try{Start-Process scp -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SCPinstalled =$true}Catch{$SCPinstalled =$false}
-    }
-    Process{
-        If($SSHinstalled -and $SCPinstalled){
-            Write-Host ("START: Generating Pre-shared key for SSH authentication with no password") -ForegroundColor Green
-            Write-Host ("INFO: You will be prompted a few times to login to {0}..." -f $DestinationIP) -ForegroundColor Gray
-        }Else{
-            Write-Host ("ERROR: SSH or SCP does not exist on host, install Git to use SSH") -ForegroundColor Red
-            return
-        }
-
-    	Write-Host 'INFO: Checking <yourprofile>/.ssh/id_rsa exists' -ForegroundColor Cyan
-    	if (-not(Test-Path -Path "./.ssh/id_rsa") -or $PSBoundParameters.ContainsKey('Force') )
-    	{
-    		if (-not(Test-Path -Path "./.ssh"))
-    		{
-    			[void](New-Item -Path "./" -Name .ssh -ItemType Directory -Force)
-    			Write-Host 'INFO: Created <yourprofile>/.ssh directory' -ForegroundColor Cyan
-    		}
-
-            #this would only run if the file was found and forced to remove
-    		If(Test-Path -Path "./.ssh/id_rsa")
-    		{
-                #remove both id_rsa and id_rsa.pub file
-                Remove-Item "./.ssh/id_rsa*" -Force -ErrorAction SilentlyContinue | Out-Null
-            }
-            ssh-keygen.exe -t rsa -b 4096 -N '""' -f "./.ssh/id_rsa"
-    		Write-Host 'INFO: Generated  <yourprofile>/.ssh/id_rsa file' -ForegroundColor Cyan
-    	}
-    	else
-    	{
-    		Write-Host 'INFO: <yourprofile>/.ssh/id_rsa already exist, skipping...' -ForegroundColor Cyan
-    	}
-
-    	$id_rsa_Location = "$env:USERPROFILE/.ssh/id_rsa"
-    	$remoteSSHServerLogin = "$User@$DestinationIP"
-
-    	Write-Host "INFO: Copying <yourprofile>/.ssh/id_rsa.pub to $DestinationIP, Type password`n" -ForegroundColor Cyan
-    	scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
-    	Write-Host "INFO: Updating authorized_keys on $DestinationIP, Type password`n" -ForegroundColor Cyan
-    	ssh "$remoteSSHServerLogin" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
-
-    	Write-Host "`nDONE: Try running command: 'ssh $User@$DestinationIP'; Now it will not prompt for password" -ForegroundColor Green
-    }
-    End{
-        Set-Location -Path $oldLocation
     }
 }

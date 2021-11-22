@@ -2,9 +2,18 @@
 # https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
 # https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
 
-#dot source configuration file
-. "$PSScriptRoot\Configs.ps1"
-
+#region Grab Configurations
+If($PSScriptRoot.ToString().length -eq 0)
+{
+     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Break
+}
+Else{
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
+    . "$PSScriptRoot\configs.ps1"
+}
+#endregion
 
 # connect to first tenant to setup vNET peering
 Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteATenantID

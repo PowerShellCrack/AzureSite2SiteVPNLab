@@ -1,13 +1,22 @@
 $ErrorActionPreference = "Stop"
-# https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
-# https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
 
-#dot source configuration file
-. "$PSScriptRoot\Configs.ps1"
+#region Grab Configurations
+If($PSScriptRoot.ToString().length -eq 0)
+{
+     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Break
+}
+Else{
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
+    . "$PSScriptRoot\configs.ps1"
+}
+#endregion
 
-#start transcript
+#region start transcript
 $LogfileName = "$RegionBName-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+#endregion
 
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
@@ -21,10 +30,7 @@ Else{
 }
 $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
 
-#temporary set auto logon ssh keys
-New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
-
-#if using BGP; ask some questions
+#region BGP checks
 If($UseBGP){
     #grab last address in subnets (for BGP)
     $Lastsubnet = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name | select -Last 1
@@ -34,17 +40,30 @@ If($UseBGP){
 
     $LocalNetworkASN = Read-host "What will be your local BGP ASN Number (range 64512 - 65534) [$($VyOSConfig.BgpAsn)]"
     If($LocalNetworkASN){$VyOSConfig['BGPAsn']=$LocalNetworkASN}
-    
+
     #Determin last address base don VyOS subnets
     $LocalPeerIP = Read-host "Whats is your last IP address in your VyOS routers subnet (Usually for the Bgp Peering Address) ['$($AddressesSpace.EndingIP)']"
     If($LocalPeerIP){$VyOSConfig['BgpPeeringAddress']=$LocalPeerIP}Else{$VyOSConfig['BgpPeeringAddress']=$AddressesSpace.EndingIP}
 }
 #endregion
 
+# https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
+# https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
+#region 1. Create a virtual network and a gateway subnet
+
 # create a resource group
-If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    New-AzResourceGroup -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName
+    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureAdvConfigSiteB.ResourceGroupName) -NoNewline
+    Try{
+        New-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+    }
+}Else{
+    Write-Host ("Using Azure resource group [{0}]" -f $AzureAdvConfigSiteB.ResourceGroupName) -ForegroundColor Green
 }
 
 #region 1. Create virtual network A
@@ -82,7 +101,7 @@ $gwpip = Get-AzPublicIpAddress -ResourceGroupName $AzureAdvConfigSiteB.ResourceG
 #endregion
 
 # get a public ip for the gateway
-$gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name gwipconfig2 -SubnetId $gwsubnet.id -PublicIpAddressId $gwpip.Id
+$gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureAdvConfigSiteB.VnetGatewayIpConfigName -SubnetId $gwsubnet.id -PublicIpAddressId $gwpip.Id
 
 #region 4. make the gateway
 $VNGBGPParams=@{}
@@ -208,59 +227,28 @@ commit
 save
 
 "@
+
 If($RouterAutomationMode){
     #region Automation Mode
-    #build script for router
-    #https://docs.vyos.io/en/crux/automation/command-scripting.html
-    '#!/bin/vbash' | Set-Content $env:temp\vyos.script
-    'source /opt/vyatta/etc/functions/script-template' | Add-Content $env:temp\vyos.script
-    '' | Add-Content $env:temp\vyos.script
-    $VyOSFinal -split '\n' | %{$_ | Add-Content $env:temp\vyos.script}
-    'exit' | Add-Content $env:temp\vyos.script
-    'run restart vpn' | Add-Content $env:temp\vyos.script
-    'run show vpn ipsec sa' | Add-Content $env:temp\vyos.script
-    '' | Add-Content $env:temp\vyos.script
-    If($UseBGP){
-        'run show ip bgp' | Add-Content $env:temp\vyos.script
-    }
-    #'' | Add-Content $env:temp\vyos.script
-    #'run reboot now' | Add-Content $env:temp\vyos.script
-    #get-content $env:temp\vyos.script
+    $VyOSFinalScript = New-VyattaScript -Value $VyOSFinal -AsObject -SetReboot
 
-    #copy script to vyos router
-    $remoteSSHServerLogin = "vyos@$VyOSExternalIP"
-    scp -o 'StrictHostKeyChecking no' "$env:temp\vyos.script" "${remoteSSHServerLogin}:~/tmp.sh"
+    #temporary set auto logon ssh keys
+    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
-    $scriptfile = 'sitebs2svpn.sh'
-    #build bash command
-    $bashCommands = @(
-        'mkdir -p ~/.scripts'
-        'chmod 700 ~/.scripts'
-        "rm -f ~/.scripts/$scriptfile"
-        "cat ~/tmp.sh >> ~/.scripts/$scriptfile"
-        'rm -f ~/tmp.sh'
-        "sed -i -e 's/\r$//' ~/.scripts/$scriptfile"
-        "chmod u+x ~/.scripts/$scriptfile"
-        "sg vyattacfg -c ~/.scripts/$scriptfile"
-    )
-    #jooin all commands as single line separated with &&
-    $bashCommand = $bashCommands -join ' && '
-    ssh "vyos@$VyOSExternalIP" $bashCommand
-
-    write-Host 
-    Write-Host "vyos is rebooting...." -ForegroundColor Gray
-    #endregion
-
+    Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
 }
 Else{
     $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2sregion2setup.txt"}
     #region Copy Paste Mode
-    Write-Host "`nCopy and Paste below in ssh session for $($VyOSConfig.VMName):`n or" -ForegroundColor Yellow
-    Write-Host "`nCopy code from $PSScriptRoot\Logs\vyoss2sregion2setup.txt" -ForegroundColor Yellow
+    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
+    Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoss2sregion2setup.txt" -ForegroundColor Yellow
+    Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSFinal -ForegroundColor Gray
-
-    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName). Run this command in console or ssh session:`n" -ForegroundColor Yellow
-    Write-Host "reboot now" -ForegroundColor Gray
+    Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
+    Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
+    Write-Host "Run this command last in ssh session: " -ForegroundColor Gray -NoNewline
+    Write-Host "reboot now" -ForegroundColor Yellow
     #endregion
 }
 
