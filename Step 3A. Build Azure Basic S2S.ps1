@@ -255,10 +255,32 @@ If($RouterAutomationMode)
     New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
     $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+
+    $Result
+
     If(!$Result){
         Write-Host "Failed to run automation script for vyos router; use manual process" -ForegroundColor Red
         $RunManualSteps = $true
     }
+
+    #wait for VM to boot completely
+    Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+    do {
+        Write-Host "." -NoNewline
+        Start-Sleep 3
+    } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
+
+    Write-Host "Booted" -ForegroundColor Green
+    Write-Host "Login to router and run [show vpn ipsec sa]..." -ForegroundColor Gray
+    $response1 = Read-host "Is the VPN tunnel up? ? [Y or N]"
+    If($response1 -eq 'Y'){
+        Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
+        Write-Host "--------------------------------------------------" -ForegroundColor Green
+    }Else{
+        Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
+        $RunManualSteps = $true
+    }
+    #endregion
 }
 Else{
     $RunManualSteps = $true
@@ -278,22 +300,5 @@ If($RunManualSteps){
     Write-Host "reboot now" -ForegroundColor Yellow
     #endregion
 }
-
-#make a connection the VPN health probe
-add-type @"
-    using System.Net;
-    using System.Security.Cryptography.X509Certificates;
-    public class TrustAllCertsPolicy : ICertificatePolicy {
-        public bool CheckValidationResult(
-            ServicePoint srvPoint, X509Certificate certificate,
-            WebRequest request, int certificateProblem) {
-            return true;
-        }
-    }
-"@
-[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
-
-$VPNGateway = Invoke-RestMethod "https://$($VyOSExternalIP):8081/healthprobe"
-$VPNGateway.string."#Text"
 
 Stop-Transcript
