@@ -22,12 +22,13 @@
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\Configs.ps1 -NoAzureCheck)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
-    . "$PSScriptRoot\Configs.ps1" -NoAzureCheck
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\configs.ps1" -NoAzureCheck
+    Write-Host "Done" -ForegroundColor Green
 }
 #endregion
 
@@ -36,17 +37,19 @@ Else{
 $LogfileName = "$RegionAName-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
+
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 #region Create VyOS VM
 If(-Not(Test-Path $VyOSConfig.ISOLocation)){Write-Host ("Unable to find VyOS ISO: [{0}]. Please update config and rerun setup" -f $VyOSConfig.ISOLocation) -ForegroundColor Red;Break}
 
 If($null -eq $VM){
+    Write-Host ("Creating a VM [{}]..." -f $VyOSConfig.VMName) -NoNewline
     $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
     Try{
-        If(Get-VHD -Path $VHDxFilePath  ){
-            Remove-Item $VHDxFilePath  -Confirm -Force -ErrorAction Stop
+        If(Get-VHD -Path $VHDxFilePath ){
+            Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
         }
-        New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop
+        New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
     }
     Catch{
         Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Red
@@ -57,10 +60,10 @@ If($null -eq $VM){
         $VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
 
         New-VM -Name $VyOSConfig.VMName -VHDPath $VHDxFilePath  `
-            -SwitchName $VmSwitchExternal -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop
+            -SwitchName $VmSwitchExternal -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop | Out-Null
         Set-VM -Name $VyOSConfig.VMName -AutomaticCheckpointsEnabled $false -Notes 'StartupOrder: 1' `
             -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
-            -DynamicMemory -ErrorAction Stop
+            -DynamicMemory -ErrorAction Stop | Out-Null
         Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
         #Connect ISO
         Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
@@ -72,6 +75,7 @@ If($null -eq $VM){
         Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Red
         Break
     }
+    Write-Host "Done" -ForegroundColor Green
 }
 Else{
     Write-Host ("VM Already created named [{0}]." -f $VM.Name) -ForegroundColor Green
@@ -92,11 +96,10 @@ Else{
 
 
 #start VM
-If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop}
-Write-Host "Configuring router for inital settings..." -ForegroundColor Gray
-
-Start-Sleep 30
-#endregion
+Write-Host "Configuring router for initial settings..." -ForegroundColor Yellow
+If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
+    Start-Sleep 45
+}
 
 #region INSTALL VyOS
 $VyOSSteps = @"
@@ -122,14 +125,15 @@ Connect to router and answer the questions below on the VM
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
+    Write-Host "`nNOTE: To get out of console, hit CTRL+ALT+LEFT ARROW" -ForegroundColor Yellow
     $response1 = Read-host "Did you complete the steps above? [Y or N]"
 } until ($response1 -eq 'Y')
 
-Write-Host "Configuring router for next configurations..." -ForegroundColor Gray
+Write-Host "`nConfiguring router for next configurations..." -ForegroundColor Yellow
 Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-Start-Sleep 30
+Start-Sleep 45
 #endregion
 
 #region Setup VyOS SSH
@@ -153,24 +157,33 @@ Connect to router and answer the questions below on the VM
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
+    Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
     $response1 = Read-host "Did you complete the steps above? [Y or N]"
 } until ($response1 -eq 'Y')
 Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting via VM" -ForegroundColor Yellow
+Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
 #endregion
-
-write-host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
 
 #region Prompt for external interface for router
 do {
+    If(Test-Path "$env:temp\VyOSextip.txt"){
+        $VyOSExistingIP = Get-Content "$env:temp\VyOSextip.txt"
+        $response1 = Read-host "Is your $($VM.VMName) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
+    }
+    If($response1 -eq 'Y'){
+        $VyOSExternalIP = $VyOSExistingIP
+    }Else{
+        $VyOSExternalIP = Read-host "What is your $($VM.VMName) router's eth0 IP Address? [eg. 192.168.1.2]"
+    }
     Remove-Item "$env:temp\VyOSextip.txt" -Force -ErrorAction SilentlyContinue | Out-Null
-    $VyOSExternalIP = Read-host "What is your $($VM.VMName) router's eth0 IP Address? [eg. 192.168.1.2]"
+
     Write-Host "Testing connection to [$VyOSExternalIP]..." -ForegroundColor Yellow -NoNewline
     Start-Sleep 5
     $TestIP = Test-Connection $VyOSExternalIP -Count 1 -Quiet
     If (!($TestIP)){
         Write-Host "Failed! Check IP [run command in router: show int ethernet eth0 brief]" -ForegroundColor Red
     } Else {
-        Write-Host ("IP [{0}] was pingable" -f $VyOSExternalIP) -ForegroundColor Green
+        Write-Host ("interface is pingable") -ForegroundColor Green
         $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
         $VyOSExternalIP | Out-File "$env:temp\VyOSextip.txt" -Force
     }
@@ -179,13 +192,15 @@ do {
 
 #region Add all internal networks to router
 Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
-
 start-sleep 10
+
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 $VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*" | Sort Name
-ForEach($net in $VyOSNetworks) {
+#TEST $net = $VyOSNetworks[0]
+ForEach($net in $VyOSNetworks)
+{
     If($net.Name -in $VM.NetworkAdapters.switchname){
-        Write-Host ("Network [{0}] is already attached to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Yellow
+        Write-Host ("Network [{0}] is already attached to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
     }
     Else{
         Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $net.Name -ErrorAction Stop
@@ -194,10 +209,14 @@ ForEach($net in $VyOSNetworks) {
 }
 
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-
 #wait for VM to boot completely
-Start-Sleep 30
+Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+do {
+    Write-Host "." -NoNewline
+    Start-Sleep 3
+} until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 #endregion
+Write-Host "Booted" -ForegroundColor Green
 
 #region Build VyOS Lan Configuration Commands
 $VyOSLanCmd = @"
@@ -326,11 +345,42 @@ If($RouterAutomationMode){
     #temporary set auto logon ssh keys
     New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
-    Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Execute -Verbose
+    $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Execute -Verbose
+
+    $Result
+
+    If(!$Result){
+        Write-Host "Failed to run automation script for vyos router; use manual process" -ForegroundColor Red
+        $RunManualSteps = $true
+    }
+
+    #wait for VM to boot completely
+    Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+    do {
+        Write-Host "." -NoNewline
+        Start-Sleep 3
+    } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
+
+    Write-Host "Booted" -ForegroundColor Green
+    Write-Host "Login to router and run [show int]..." -ForegroundColor Gray
+    $response1 = Read-host "Are all interfaces configured? [Y or N]"
+    If($response1 -eq 'Y'){
+        Write-Host ("Done configuring router interfaces") -ForegroundColor Green
+        Write-Host "--------------------------------------------------" -ForegroundColor Green
+    }Else{
+        Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
+        $RunManualSteps = $true
+    }
+    #endregion
 }
 Else{
-    $VyOSLanCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoslansetup.txt"}
+    $RunManualSteps = $true
+}
+
+
+If($RunManualSteps){
     #region Copy Paste Mode
+    $VyOSLanCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoslansetup.txt"}
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
     Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoslansetup.txt" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow

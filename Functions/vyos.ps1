@@ -1,11 +1,4 @@
-Function Test-CommandExists{
-    Param ($command)
-    $oldPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'stop'
-    try {if(Get-Command $command){RETURN $true}}
-    Catch {Write-Host "$command does not exist"; RETURN $false}
-    Finally {$ErrorActionPreference=$oldPreference}
-}
+
 
 Function New-SSHSharedKey{
 	<#
@@ -49,16 +42,19 @@ Function New-SSHSharedKey{
         $oldLocation = Get-Location
     	Set-Location -Path $env:USERPROFILE
 
-        try{Start-Process ssh -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SSHinstalled =$true}Catch{$SSHinstalled =$false}
-        try{Start-Process scp -ErrorAction Stop -PassThru -Wait -WindowStyle Hidden | Out-Null;$SCPinstalled =$true}Catch{$SCPinstalled =$false}
+        $exeNotExists = @()
+        $CmdAvailable = $true
+        If(!(Test-Command ssh-keygen)){$exeNotExists += 'ssh-keygen';$CmdAvailable = $false}
+        If(!(Test-Command ssh)){$exeNotExists += 'ssh';$CmdAvailable = $false}
+        If(!(Test-Command scp)){$exeNotExists += 'scp';$CmdAvailable = $false}
     }
     Process{
-        If($SSHinstalled -and $SCPinstalled){
+        If($CmdAvailable){
             Write-Host ("START: Generating Pre-shared key for SSH authentication with no password") -ForegroundColor Green
             Write-Host ("INFO: You will be prompted a few times to login to {0}..." -f $DestinationIP) -ForegroundColor Gray
         }Else{
-            Write-Host ("ERROR: SSH or SCP does not exist on host, install Git to use SSH") -ForegroundColor Red
-            return
+            Write-Host ("ERROR: {0} does not exist on host, install Git to use SSH" -f ($exeNotExists -join ',')) -ForegroundColor Red
+            return $false
         }
 
     	Write-Host "INFO: Checking $env:USERPROFILE/.ssh/id_rsa exists" -ForegroundColor Cyan
@@ -69,6 +65,7 @@ Function New-SSHSharedKey{
     			[void](New-Item -Path "./" -Name .ssh -ItemType Directory -Force)
     			Write-Host "INFO: Created $env:USERPROFILE\.ssh directory" -ForegroundColor Cyan
     		}
+
             #this would only run if the file was found and forced to remove
             If(Test-Path -Path "./.ssh/id_rsa")
             {
@@ -76,8 +73,10 @@ Function New-SSHSharedKey{
                 Remove-Item "./.ssh/id_rsa*" -Force -ErrorAction SilentlyContinue | Out-Null
             }
             #option -y outputs to variable
-            $sshrsakey = ssh-keygen.exe -y -t rsa -b 4096 -N '""' -f "./.ssh/id_rsa"
-    		Write-Host "INFO: Generated $env:USERPROFILE\.ssh\id_rsa file" -ForegroundColor Cyan
+            #ssh-keygen.exe -t rsa -b 4096 -N "" -f ./.ssh/id_rsa
+            $sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -f ./.ssh/id_rsa' -PassThru -Wait
+            If($sshrsakey.ExitCode -eq 0){Write-Host "INFO: Generated $env:USERPROFILE\.ssh\id_rsa file" -ForegroundColor Cyan;}
+            Else{Return $sshrsakey.ExitCode}
 
             #TEST Get-Content "./.ssh/known_hosts" | Where-Object {$_ -match $DestinationIP}
             If(Test-Path "./.ssh/known_hosts"){
@@ -90,24 +89,29 @@ Function New-SSHSharedKey{
 
             #TEST Get-content "$env:USERPROFILE/.ssh/id_rsa"
     		$id_rsa_Location = "./.ssh/id_rsa"
+    	    #TEST $remoteSSHServerLogin = "vyos@$DestinationIP"
     	    $remoteSSHServerLogin = "$User@$DestinationIP"
-
-
-    		Write-Host "INFO: Copying $env:USERPROFILE\.ssh\id_rsa.pub to $DestinationIP..." -NoNewLine
-    		start-sleep 5
-    		Write-Host "If prompted, please type $User password`n" -ForegroundColor Cyan
-        	scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
-        	Write-Host "INFO: Updating authorized_keys on $DestinationIP..." -NoNewLine
-    		start-sleep 5
-    		Write-Host "If prompted, please type $User password again`n" -ForegroundColor Cyan
-        	ssh $remoteSSHServerLogin "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
+            If(Test-Path "$env:USERPROFILE\.ssh\id_rsa.pub"){
+                Write-Host "INFO: Copying $env:USERPROFILE\.ssh\id_rsa.pub to $DestinationIP..." -NoNewLine
+                start-sleep 5
+                Write-Host "If prompted, please type $User password`n" -ForegroundColor Cyan
+                #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:~/tmp.pub'" -PassThru -Wait
+                & scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+                Write-Host "INFO: Updating authorized_keys on $DestinationIP..." -NoNewLine
+                start-sleep 5
+                Write-Host "If prompted, please type $User password again`n" -ForegroundColor Cyan
+                & ssh -i $remoteSSHServerLogin "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
+                #TEST & scp -o 'StrictHostKeyChecking no' -i ./.ssh/id_rsa "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+            }
     	}
     	else
     	{
-    		Write-Host "INFO: $env:USERPROFILE\.ssh\id_rsa already exist, skipping..." -ForegroundColor Cyan
+    		Write-Host "INFO: $env:USERPROFILE\.ssh\id_rsa already exist, reading rsa key..." -ForegroundColor Cyan
+    		$sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -y -f ./.ssh/id_rsa' -PassThru -Wait
+            If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}Else{$sshrsakey.stdout}
     	}
 
-    	Write-Host "DONE: Try running command: 'ssh $User@$DestinationIP'; Now it will not prompt for password" -ForegroundColor Green
+    	#Write-Host "DONE: Try running command: 'ssh $User@$DestinationIP'; Now it will not prompt for password" -ForegroundColor Green
     }
     End{
         Set-Location -Path $oldLocation
@@ -174,6 +178,7 @@ Function Initialize-VyattaScript {
         [Parameter(Mandatory=$true,Position=0)]
         [ValidateScript({Test-IPAddress $_})]
         [string]$IP,
+        [string]$RSAFile = "$env:USERPROFILE\.ssh\id_rsa",
         [Parameter(Mandatory=$true,Position=1)]
         [string]$Path,
         [switch]$Execute
@@ -182,14 +187,32 @@ Function Initialize-VyattaScript {
     #copy script to vyos router
     $remoteSSHServerLogin = "vyos@$IP"
 
-    If(Test-Path $Path)
+    $exeNotExists = @()
+    $CmdAvailable = $true
+    If(!(Test-Command ssh-keygen)){$exeNotExists += 'ssh-keygen';$CmdAvailable = $false}
+    If(!(Test-Command ssh)){$exeNotExists += 'ssh';$CmdAvailable = $false}
+    If(!(Test-Command scp)){$exeNotExists += 'scp';$CmdAvailable = $false}
+
+    If(!$CmdAvailable){
+        Write-Host ("ERROR: {0} does not exist on host, install Git to use SSH" -f ($exeNotExists -join ',')) -ForegroundColor Red
+        return $false
+    }
+
+    If((Test-Path $Path) -and (Test-Connection $IP -Count 1))
     {
         Write-Verbose "Transferring file $Path to $IP as ~/tmp.sh"
-        scp -o 'StrictHostKeyChecking no' $Path "${remoteSSHServerLogin}:~/tmp.sh"
-        #scp -o 'StrictHostKeyChecking no' "${remoteSSHServerLogin}:~/.scripts/test.sh" "$env:temp\test.bh"
+        If(Test-Path $RSAFile){
+            & scp -o 'StrictHostKeyChecking no' -i $RSAFile $Path "${remoteSSHServerLogin}:~/tmp.sh"
+        }Else{
+            & scp -o 'StrictHostKeyChecking no' $Path "${remoteSSHServerLogin}:~/tmp.sh"
+        }
+
+        #TEST scp -o 'StrictHostKeyChecking no' "${remoteSSHServerLogin}:~/.scripts/test.sh" "$env:temp\test.bh"
+
         If($PSBoundParameters.ContainsKey('Execute'))
         {
-            $scriptfile = 'intconfigure.sh'
+            $randomchar = -join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})
+            $scriptfile = "vyos_" + $randomchar.ToLower() + ".sh"
             Write-Verbose "Executing file 'tmp.sh' as $scriptfile on $IP"
             #build bash command
             $bashCommands = @(
@@ -204,7 +227,13 @@ Function Initialize-VyattaScript {
             )
             #join all commands as single line separated with &&
             $bashCommand = $bashCommands -join ' && '
-            ssh $remoteSSHServerLogin $bashCommand
+            If(Test-Path $RSAFile){
+                #VERBOSE & ssh -v -i $RSAFile $remoteSSHServerLogin $bashCommand
+                & ssh -i $RSAFile $remoteSSHServerLogin $bashCommand
+            }Else{
+                & ssh -i $remoteSSHServerLogin $bashCommand
+            }
+
         }
     }
     Else{

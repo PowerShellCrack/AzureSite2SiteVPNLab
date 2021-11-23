@@ -31,6 +31,8 @@ $AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
 
 $ISOLocation = 'E:\ISOs\VyOS-1.1.8-amd64.iso'
 
+$HyperVVMLocation = '<default>'
+$HyperVHDxLocation = '<default>'
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 
@@ -50,25 +52,6 @@ $RouterAutomationMode = $True
 # STOP
 #============================================
 
-If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteAHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
-    break
-}
-
-If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteBHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
-    break
-}
-
-If(Test-SameSubnet -Ip1 ($AzureSiteAHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteASpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteAHubCIDR] and [`$AzureSiteASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
-    break
-}
-
-If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteBSpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
-    break
-}
 ##*=============================================
 ##* Runtime Function - REQUIRED
 ##*=============================================
@@ -205,8 +188,9 @@ If($null -eq $scriptRoot){
 #endregion
 
 #check if SSH and SCP exist for automation mode to work
-If(-Not(Test-CommandExists ssh) -and -Not(Test-CommandExists scp) -and $RouterAutomationMode){
-    Write-Host ("SSH or SCP commands not found. Disabling Automation mode {0} " -f $_.exception.message) -ForegroundColor Red
+If(-Not(Test-Command ssh) -and -Not(Test-Command scp) -and -Not(Test-Command ssh-keygen) )
+{
+    Write-Host ("SSH, SCP, SSH-KEYGEN commands not found. Disabling Automation mode {0} " -f $_.exception.message) -ForegroundColor Red
     $RouterAutomationMode = $False
 }
 
@@ -229,6 +213,25 @@ If(!$Global:randomChar){
 }
 #endregion
 
+If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteAHubCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    break
+}
+
+If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteBHubCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    break
+}
+
+If(Test-SameSubnet -Ip1 ($AzureSiteAHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteASpokeCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$AzureSiteAHubCIDR] and [`$AzureSiteASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    break
+}
+
+If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteBSpokeCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    break
+}
 #============================================
 # AZURE CONNECTION
 #============================================
@@ -254,25 +257,40 @@ If(!$NoAzureCheck){
 #============================================
 # LAB CONFIGURATIONS
 #============================================
+If($HyperVVMLocation -eq '<default>')
+{
+    If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -eq 'Enabled' ){
+        $HyperVVMLocation = Get-VMHost | Select -ExpandProperty VirtualMachinePath
+    }
+    Else{
+        $HyperVVMLocation = 'C:\ProgramData\Microsoft\Windows\Hyper-V\Virtual Machines\'
+    }
+}
+
+If($HyperVHDxLocation -eq '<default>')
+{
+    If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -eq 'Enabled' ){
+        $HyperVHDxLocation = Get-VMHost | Select -ExpandProperty VirtualHardDiskPath
+    }
+    Else{
+        $HyperVHDxLocation = 'C:\Users\Public\Documents\Hyper-V\Virtual hard disks\'
+    }
+}
 
 
 #region Hyper-V Configurations
 #------------------------------
 $HyperVConfig = @{
     ChangeLocation = $true
-    VirtualMachineLocation = 'D:\Hyper-V\Virtual Machines\'
-    VirtualHardDiskLocation = 'D:\Hyper-V\Virtual Hard Disks\'
+    VirtualMachineLocation = $HyperVVMLocation
+    VirtualHardDiskLocation = $HyperVHDxLocation
     EnableSessionMode = $true
-
-    ExternalNetworks = @{
-        External = "Default Switch"
-    }
-
     ConfigureForVLAN = $False
     VLANID = 21
     AllowedvLanIdRange = '1-100'
 }
 #endregion
+
 
 #region Edge router Configurations
 #---------------------------------
@@ -435,7 +453,7 @@ $AzureAdvConfigSiteA = @{
 
     StorageSku = "standard_lrs"
 
-    PublicIpAddressName = $RegionAName.Replace(" ",'').ToLower() + '-vngw-pip'
+    PublicIpName = $RegionAName.Replace(" ",'').ToLower() + '-vngw-pip'
 
     VnetPeerNameAB = ($RegionAName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
     VnetPeerNameBA = ($RegionAName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
@@ -511,7 +529,7 @@ $AzureAdvConfigSiteB = @{
 
     StorageSku = "standard_lrs"
 
-    PublicIpAddressName = $RegionBName.Replace(" ",'').ToLower() + '-vngw-pip'
+    PublicIpName = $RegionBName.Replace(" ",'').ToLower() + '-vngw-pip'
 
     VnetPeerNameAB = ($RegionBName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
     VnetPeerNameBA = ($RegionBName + 'SpokeToHub').Replace(" ",'').Replace("-",'')

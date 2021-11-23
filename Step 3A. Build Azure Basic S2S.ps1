@@ -8,8 +8,9 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
-    . "$PSScriptRoot\configs.ps1"
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\configs.ps1" -NoAzureCheck
+    Write-Host "Done" -ForegroundColor Green
 }
 #endregion
 
@@ -22,7 +23,7 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
 }
-ElseIf(Test-Path "$env:temp\VyOSextipw.txt"){
+ElseIf(Test-Path "$env:temp\VyOSextip.txt"){
     $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
 }
 Else{
@@ -38,7 +39,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 {
     Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -NoNewline
     Try{
-        New-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName
+        New-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -76,8 +77,8 @@ $vnet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupNam
 # add gateway prefix if not already exists
 If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vnet |Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureSimpleConfig.VnetGatewayPrefix )
 {
+    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetName) -NoNewline
     Try{
-        Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetName) -NoNewline
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix -VirtualNetwork $vnet | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -102,10 +103,10 @@ Catch{
 }
 #endregion
 
-#region 3. Request a Public IP address
-Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIPName) -NoNewline
+#region 3. Create a Public IP address
+Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIpName) -NoNewline
 Try{
-    $gwpip= New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+    $gwpip= New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                     -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic
     Write-Host "Done" -ForegroundColor Green
 }
@@ -115,7 +116,7 @@ Catch{
 #endregion
 
 #region 4. make the gateway
-Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIPName, 'GatewaySubnet') -NoNewline
+Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIpName, 'GatewaySubnet') -NoNewline
 Try{
     #$vnet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
     $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vnet
@@ -146,7 +147,7 @@ Catch{
 #endregion
 
 #region 6 & 7. Create the VPN connection
-If( $azpip = (Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName).IpAddress)
+If( $azpip = (Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName).IpAddress)
 {
     Write-host ("Create the VPN connection for [{0}]..." -f $AzureSimpleConfig.ConnectionName) -NoNewline
     Try{
@@ -164,7 +165,7 @@ If( $azpip = (Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -Resou
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
     }
 }Else{
-    Write-Host ("No IP has been assigned to: {0}" -f $AzureSimpleConfig.PublicIPName) -ForegroundColor Red
+    Write-Host ("No IP has been assigned to: {0}" -f $AzureSimpleConfig.PublicIpName) -ForegroundColor Red
     Break
 }
 #endregion
@@ -174,7 +175,7 @@ $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleC
 #endregion
 
 #get the Public IP
-#$azpip = (Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIPName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName).IpAddress
+#$azpip = (Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName).IpAddress
 
 #Output information need for local router
 Write-Host "Information needed to configure local router vpn:" -ForegroundColor Yellow
@@ -187,14 +188,14 @@ Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
 Write-Host "Be sure to follow a the configuration file 'VyOS_vpn_basic.md' in the VyOS_setup folder" -ForegroundColor Yellow
 
 #region Build VyOS VPN Configuration Commands
-$VyOSFinalCmd = @"
+$VyOSFinal = @"
 # Enter configuration mode.
 configure
 `n
 "@
 
 If($VyOSConfig.ResetVPNConfigs){
-    $VyOSFinalCmd += @"
+    $VyOSFinal += @"
 #delete current configurations
 delete vpn ipsec
 delete protocols bgp
@@ -204,7 +205,7 @@ delete protocols bgp
 $VyOSConfig['ResetVPNConfigs']=$false
 }
 
-$VyOSFinalCmd += @"
+$VyOSFinal += @"
 # Set up the IPsec preamble for link Azures gateway
 set vpn ipsec esp-group azure compression 'disable'
 set vpn ipsec esp-group azure lifetime '3600'
@@ -239,7 +240,7 @@ set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 
 "@
 
-$VyOSFinalCmd += @"
+$VyOSFinal += @"
 
 commit
 save
@@ -248,20 +249,28 @@ save
 #region Automation Mode
 If($RouterAutomationMode)
 {
-    $VyOSFinalScript = New-VyattaScript -Value $VyOSFinalCmd -AsObject -SetReboot
-
+    $VyOSFinalScript = New-VyattaScript -Value $VyOSFinal -AsObject -SetReboot
+    #TEST $VyOSFinalScript.value
     #temporary set auto logon ssh keys
     New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
-    Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+    $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+    If(!$Result){
+        Write-Host "Failed to run automation script for vyos router; use manual process" -ForegroundColor Red
+        $RunManualSteps = $true
+    }
 }
 Else{
-    $VyOSFinalCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2ssimplesetup.txt"}
+    $RunManualSteps = $true
+}
+
+If($RunManualSteps){
+    $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2ssimplesetup.txt"}
     #region Copy Paste Mode
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
     Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoss2ssimplesetup.txt" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host $VyOSFinalCmd -ForegroundColor Gray
+    Write-Host $VyOSFinal -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
@@ -269,5 +278,22 @@ Else{
     Write-Host "reboot now" -ForegroundColor Yellow
     #endregion
 }
+
+#make a connection the VPN health probe
+add-type @"
+    using System.Net;
+    using System.Security.Cryptography.X509Certificates;
+    public class TrustAllCertsPolicy : ICertificatePolicy {
+        public bool CheckValidationResult(
+            ServicePoint srvPoint, X509Certificate certificate,
+            WebRequest request, int certificateProblem) {
+            return true;
+        }
+    }
+"@
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+
+$VPNGateway = Invoke-RestMethod "https://$($VyOSExternalIP):8081/healthprobe"
+$VPNGateway.string."#Text"
 
 Stop-Transcript

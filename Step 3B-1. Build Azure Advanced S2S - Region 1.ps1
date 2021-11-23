@@ -8,8 +8,9 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
-    . "$PSScriptRoot\configs.ps1"
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\configs.ps1" -NoAzureCheck
+    Write-Host "Done" -ForegroundColor Green
 }
 #endregion
 
@@ -22,7 +23,7 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
 }
-ElseIf(Test-Path "$env:temp\VyOSextipw.txt"){
+ElseIf(Test-Path "$env:temp\VyOSextip.txt"){
     $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
 }
 Else{
@@ -56,7 +57,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 {
     Write-Host ("Creating Azure resource group [{0}]..." -f $AzureAdvConfigSiteA.ResourceGroupName) -NoNewline
     Try{
-        New-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName
+        New-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -69,47 +70,87 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 #region 1. Create virtual network A
 If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
 {
+    Write-Host ("Creating Azure hub virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetHubName) -NoNewline
     Try{
         $vNetA = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
                             -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix
         #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
-        Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix
-        Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
+        Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix | Out-Null
+        Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
     }
-    Set-AzVirtualNetwork -VirtualNetwork $vNetA | Out-Null
+    Finally{
+        Set-AzVirtualNetwork -VirtualNetwork $vNetA | Out-Null
+    }
 }
+#endregion
 
+# Create virtual network B
 If(!(Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName))
 {
-    # Create virtual network B
-    $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-                        -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
-    #Create a subnet configuration for first VM subnet (vnet B)
-    Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
-            -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
-    Set-AzVirtualNetwork -VirtualNetwork $vNetB
-    #endregion
+    Write-Host ("Creating Azure spoke virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -NoNewline
+    Try{
+        $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+                            -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
+        #Create a subnet configuration for first VM subnet (vnet B)
+        Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
+                -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+    }
+    Finally{
+        Set-AzVirtualNetwork -VirtualNetwork $vNetB | Out-Null
+    }
 }
+#endregion
 
 #region 2. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
-Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameAB -VirtualNetwork $vNetA -RemoteVirtualNetworkId $vNetB.Id -ErrorAction SilentlyContinue
-Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameBA -VirtualNetwork $vNetB -RemoteVirtualNetworkId $vNetA.Id -ErrorAction SilentlyContinue
-
+Write-Host ("Creating peering between vnets [{0}] and [{1}]..." -f $AzureAdvConfigSiteA.VnetPeerNameAB,$AzureAdvConfigSiteA.VnetPeerNameBA) -NoNewline
+Try{
+    Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameAB -VirtualNetwork $vNetA -RemoteVirtualNetworkId $vNetB.Id
+    Add-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameBA -VirtualNetwork $vNetB -RemoteVirtualNetworkId $vNetA.Id
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+}
+#endregion
 
 #get vnet and gateway subnet
 $vNet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 $gwsubnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNet
+
+#region 3. Create a Public IP address
+Write-Host ("Creating Azure public IP [{0}]..." -f $AzureAdvConfigSiteA.PublicIPName) -NoNewline
+Try{
+    New-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+            -Location $AzureAdvConfigSiteA.LocationName -AllocationMethod Dynamic | Out-Null
+    $gwpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+}
 #endregion
 
-#region 3. Create Public IP
-New-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-        -Location $AzureAdvConfigSiteA.LocationName -AllocationMethod Dynamic
-$gwpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+
+#region 4. make the gateway
+Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureAdvConfigSiteA.PublicIPName, 'GatewaySubnet') -NoNewline
+Try{
+    #$vnet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+    $gwsubnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vnet
+    $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureAdvConfigSiteA.VnetGatewayIpConfigName -SubnetId $gwsubnet.Id -PublicIpAddressId $gwpip.Id
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+}
 
 # get a public ip for the gateway
 $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureAdvConfigSiteA.VnetGatewayIpConfigName -SubnetId $gwsubnet.Id -PublicIpAddressId $gwpip.Id
@@ -154,7 +195,7 @@ New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionN
 
 $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 # get the BGP ip for local gw
-$azpip = (Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpAddressName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName).IpAddress
+$azpip = (Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName).IpAddress
 If($UseBGP){$bgpsettings = $gateway1.BgpSettingsText | ConvertFrom-Json}
 
 #Ouput information need for local router
@@ -174,14 +215,14 @@ Write-host ("Home Public IP:        {0}" -f $HomePublicIP)
 Write-Host "Be sure to follow a the configuration file 'VyOS_vpn_2site_bgp.md' in the VyOS_setup folder`n" -ForegroundColor Yellow
 
 
-$VyOScomand = @"
+$VyOSFinal = @"
 # Enter configuration mode.
 configure
 `n
 "@
 
 If($VyOSConfig.ResetVPNConfigs){
-    $VyOScomand += @"
+    $VyOSFinal += @"
 #delete current configurations
 delete vpn ipsec
 delete protocols bgp
@@ -191,7 +232,7 @@ delete protocols bgp
 $VyOSConfig['ResetVPNConfigs']=$false
 }
 
-$VyOScomand += @"
+$VyOSFinal += @"
 # Set up the IPsec preamble for link Azures gateway
 set vpn ipsec esp-group azure compression 'disable'
 set vpn ipsec esp-group azure lifetime '3600'
@@ -227,7 +268,7 @@ set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
 If($UseBGP){
-    $VyOScomand += @"
+    $VyOSFinal += @"
 #BGP for Azure East
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) ebgp-multihop '8'
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) remote-as '$($bgpsettings.Asn)'
@@ -235,7 +276,7 @@ set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddres
 "@
 }
 
-$VyOScomand += @"
+$VyOSFinal += @"
 
 commit
 save
@@ -248,9 +289,17 @@ If($RouterAutomationMode){
     #temporary set auto logon ssh keys
     New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
 
-    Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+    $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+    If(!$Result){
+        Write-Host "Failed to run automation script for vyos router; use manual process" -ForegroundColor Red
+        $RunManualSteps = $true
+    }
 }
 Else{
+    $RunManualSteps = $true
+}
+
+If($RunManualSteps){
     $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2sregion1setup.txt"}
     #region Copy Paste Mode
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow

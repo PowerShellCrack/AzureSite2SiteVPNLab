@@ -13,8 +13,8 @@
 ## Scripts
 
 - **configs.ps1**. <-- This script is used to answer script values; linked to all scripts
-  - Rename _configs.example.ps1_ to **configs.ps1**. 
-  - Be sure to look through the hashtables and change anything you feel is necessary.  
+  - Rename _configs.example.ps1_ to **configs.ps1**.
+  - Be sure to look through the hashtables and change anything you feel is necessary.
   - All the script use this as an answer file for each of the setup. The answers are loaded in hashtable format
   - There are few things you should change on the top section:
 
@@ -52,7 +52,7 @@ $AzureVnetToVnetPeering = @{
 }
 ```
 
-- **library.ps1** <-- Custom functions used to automate 
+- **library.ps1** <-- Custom functions used to automate
 
 **NOTE**: All logs are written using a transcript to the logs folder; just in case you need to troubleshoot
 
@@ -60,7 +60,7 @@ $AzureVnetToVnetPeering = @{
 
 **NOTE:** be sure to run these scripts with elevated rights.
 
-1. run script: **Step 1. Setup HyperV Lab.ps1**
+1. run script: **Step 1. Setup HyperV for Lab.ps1**
 
 ### Setup VYOS Router (in Hyper-V)
 
@@ -77,12 +77,12 @@ $AzureVnetToVnetPeering = @{
 ## Azure VPN Lab
 There are few options when building the Azure lab. Your Options are:
 
-  _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub or spoke configurations. 
+  _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub or spoke configurations.
 
-  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Run script: 
+  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Run script:
 
   _Option C_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts [in order]:
-  
+
 1. **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
 2. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
 3. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1**

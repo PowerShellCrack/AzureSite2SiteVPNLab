@@ -1,5 +1,13 @@
 # Change log for AzureSite2SiteVpnLab
 
+## 1.3.1 - November 23, 2021
+
+- Scripts can now be ran multiple times without breaking something
+- Fixed rsa keygen when file exists already; outputs rsa value instead of redoing it.
+- Added more logic and output for VYOS router creation; check when vm is booted
+- Fixed hyper-v networking: kept building same subnets over and over and checks for config paths
+- Added ssh-keygen check; need for ssh shared key
+
 ## 1.3.0 - November 22, 2021
 
 - Resolved Basic S2S script issues; using wrong gateway subnets and configs
