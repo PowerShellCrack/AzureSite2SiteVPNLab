@@ -26,8 +26,6 @@ Else{
 
 #region Configure Hyper-V settings
 Write-Host ("Setting up Hyper-V...") -NoNewline
-#Grab physical network
-$FastestPhysicalAdapter = (Get-NetAdapter -Physical | Where-Object {$_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch "Xbox"} | Sort-Object $_.LinkSpeed | Select-Object -First 1).Name
 If( ($HyperVConfig.ChangeLocation) -and ((Get-VMHost).VirtualMachinePath -ne $HyperVConfig.VirtualMachineLocation) -or ((Get-VMHost).VirtualHardDiskPath -ne $HyperVConfig.VirtualHardDiskLocation) ){
     New-Item $HyperVConfig.VirtualMachineLocation -ItemType Directory -ErrorAction SilentlyContinue
     New-Item $HyperVConfig.VirtualHardDiskLocation -ItemType Directory -ErrorAction SilentlyContinue
@@ -41,9 +39,23 @@ Write-Host "Done" -ForegroundColor Green
 
 #region Create External Switch
 Write-Host ("Configuring Hyper-V External switch...") -NoNewline
+#Grab physical network that is connected to the internet
+$InternetConnectedAdapter = Get-NetAdapter -Physical | Where-Object {$_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch "Xbox"} | Sort-Object $_.LinkSpeed | Select-Object -First 1
+If($null -eq $InternetConnectedAdapter){ Write-Host ("There is no known physical adapter connect to the internet. Unable to continue! ") -ForegroundColor Red;Break}
+
+#check if there are any external switches; if not create one
 $HyperVSwitches = Get-VMSwitch
-If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') ) {
-    New-VMSwitch -Name 'External' -NetAdapterName $FastestPhysicalAdapter -AllowManagementOS $true -Notes 'External Switch'
+If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') )
+{
+    New-VMSwitch -Name 'External' -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -Notes 'External Switch'
+}
+ElseIf( ($InternetConnectedAdapter.InterfaceGuid -replace '^{|}$','') -notin ($HyperVSwitches | Where SwitchType -eq 'External').NetAdapterInterfaceGuid.Guid){
+    #Check If external is connect to a internet connected adapter
+    Try{
+        Set-VMSwitch -VMSwitch ($HyperVSwitches | Where SwitchType -eq 'External') -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -ErrorAction Stop
+    }Catch{
+        Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Red
+    }
 }
 
 Write-Host "Done" -ForegroundColor Green

@@ -5,4 +5,5 @@ configs.example.ps1
 /Design/*
 !/.vscode/
 /.vscode/*
-
+!/.ssh/
+/.ssh/*

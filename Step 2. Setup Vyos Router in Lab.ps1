@@ -43,7 +43,7 @@ $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 If(-Not(Test-Path $VyOSConfig.ISOLocation)){Write-Host ("Unable to find VyOS ISO: [{0}]. Please update config and rerun setup" -f $VyOSConfig.ISOLocation) -ForegroundColor Red;Break}
 
 If($null -eq $VM){
-    Write-Host ("Creating a VM [{}]..." -f $VyOSConfig.VMName) -NoNewline
+    Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -NoNewline
     $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
     Try{
         If(Get-VHD -Path $VHDxFilePath ){
@@ -104,9 +104,9 @@ If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
 #region INSTALL VyOS
 $VyOSSteps = @"
 `n
-You will be Loading an image onto the Virtual Machine router
-Connect to router and answer the questions below on the VM
-=======================================
+Installing an image onto the virtual router
+Connect to router and answer the questions below:
+=================================================
   VyOS login: vyos
   Password: vyos
   VyOS@VyOS:~$ install image
@@ -125,7 +125,7 @@ Connect to router and answer the questions below on the VM
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
-    Write-Host "`nNOTE: To get out of console, hit CTRL+ALT+LEFT ARROW" -ForegroundColor Yellow
+    Write-Host "`nNOTE: To get out of console, hit [CTRL+ALT+LEFT ARROW]" -ForegroundColor Yellow
     $response1 = Read-host "Did you complete the steps above? [Y or N]"
 } until ($response1 -eq 'Y')
 
@@ -139,9 +139,9 @@ Start-Sleep 45
 #region Setup VyOS SSH
 $VyOSSteps = @"
 `n
-You will be enabling SSH on the Virtual Machine router
-Connect to router and answer the questions below on the VM
-=======================================
+Enabling network and SSH on the virtual router
+Connect to router and answer the questions below:
+=================================================
   vyos Base Configuration
   vyos login: vyos
   Password: [New password]
@@ -157,11 +157,12 @@ Connect to router and answer the questions below on the VM
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
+    Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
     Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
     $response1 = Read-host "Did you complete the steps above? [Y or N]"
 } until ($response1 -eq 'Y')
-Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting via VM" -ForegroundColor Yellow
-Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
+Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting VM console" -ForegroundColor Yellow
+
 #endregion
 
 #region Prompt for external interface for router
@@ -217,6 +218,7 @@ do {
 } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 #endregion
 Write-Host "Booted" -ForegroundColor Green
+
 
 #region Build VyOS Lan Configuration Commands
 $VyOSLanCmd = @"
@@ -339,6 +341,7 @@ save
 
 
 If($RouterAutomationMode){
+    Write-Host "Attempting to automatically configure router's lan settings..." -ForegroundColor Yellow
     #region Automation Mode
     $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot
 
@@ -350,26 +353,28 @@ If($RouterAutomationMode){
     $Result
 
     If(!$Result){
-        Write-Host "Failed to run automation script for vyos router; use manual process" -ForegroundColor Red
+        Write-Host "Failed to run automation script for vyos router; please use manual process instead" -ForegroundColor Red
         $RunManualSteps = $true
     }
+    Else{
+        #wait for VM to boot completely
+        Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+        do {
+            Write-Host "." -NoNewline
+            Start-Sleep 3
+        } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
-    #wait for VM to boot completely
-    Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
-    do {
-        Write-Host "." -NoNewline
-        Start-Sleep 3
-    } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
-
-    Write-Host "Booted" -ForegroundColor Green
-    Write-Host "Login to router and run [show int]..." -ForegroundColor Gray
-    $response1 = Read-host "Are all interfaces configured? [Y or N]"
-    If($response1 -eq 'Y'){
-        Write-Host ("Done configuring router interfaces") -ForegroundColor Green
-        Write-Host "--------------------------------------------------" -ForegroundColor Green
-    }Else{
-        Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
-        $RunManualSteps = $true
+        Write-Host "Booted" -ForegroundColor Green
+        Write-Host "Login to router and run [show int]..." -ForegroundColor Gray
+        $response1 = Read-host "Are all interfaces configured? [Y or N]"
+        If($response1 -eq 'Y'){
+            Write-Host ("Done configuring router interfaces") -ForegroundColor Green
+            Write-Host "--------------------------------------------------" -ForegroundColor Green
+            $RunManualSteps = $false
+        }Else{
+            Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
+            $RunManualSteps = $true
+        }
     }
     #endregion
 }

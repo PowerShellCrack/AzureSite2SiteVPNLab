@@ -50,8 +50,8 @@ Function New-SSHSharedKey{
     }
     Process{
         If($CmdAvailable){
-            Write-Host ("START: Generating Pre-shared key for SSH authentication with no password") -ForegroundColor Green
-            Write-Host ("INFO: You will be prompted a few times to login to {0}..." -f $DestinationIP) -ForegroundColor Gray
+            Write-Host ("START: Generating Pre-shared key for SSH authentication") -ForegroundColor Green
+            Write-Host ("INFO: You may be prompted a few times to login to {0}..." -f $DestinationIP) -ForegroundColor Gray
         }Else{
             Write-Host ("ERROR: {0} does not exist on host, install Git to use SSH" -f ($exeNotExists -join ',')) -ForegroundColor Red
             return $false

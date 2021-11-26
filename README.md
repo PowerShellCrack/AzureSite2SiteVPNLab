@@ -5,7 +5,7 @@
 - Azure subscription (VSE or Trial will work)
 - Windows OS thats supports Hyper-V
 - Edge router with S2S IPSEC VPN capabilities OR vyOS Router
-  - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://downloads.vyos.io/?dir=release/legacy/1.1.8/VyOS-1.1.8-amd64.iso)
+  - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso)
 - Access to home router and port forwarding
 - Partial knowledge with Powershell
 - SSH utility such as putty or git cmd. You can get it [**here**](https://git-scm.com/downloads)

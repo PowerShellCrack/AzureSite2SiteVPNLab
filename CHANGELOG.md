@@ -1,8 +1,16 @@
 # Change log for AzureSite2SiteVpnLab
 
+
+## 1.3.2 - November 26, 2021
+
+- Added vpn check after rerun; allows script to fix the connection is ran again
+- updated output to be cleaner; easier to view status during output
+- Standardized configs naming using literal strings.
+- Added vyos ISO downloader; only downloads if iso path is invalid
+
 ## 1.3.1 - November 23, 2021
 
-- Scripts can now be ran multiple times without breaking something
+- Scripts can now be ran multiple times without breaking something; checks if resources exists
 - Fixed rsa keygen when file exists already; outputs rsa value instead of redoing it.
 - Added more logic and output for VYOS router creation; check when vm is booted
 - Fixed hyper-v networking: kept building same subnets over and over and checks for config paths
