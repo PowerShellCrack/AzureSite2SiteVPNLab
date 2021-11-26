@@ -382,19 +382,20 @@ If($RouterAutomationMode)
     }
     Else{
         #wait for VM to boot completely
+        Write-Host "Completed..." -ForegroundColor Green -NoNewline
         Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
         do {
             Write-Host "." -NoNewline
             Start-Sleep 3
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
-        Write-Host "Booted" -ForegroundColor Green
+        Write-Host "Ready" -ForegroundColor Green
         Write-Host "--------------------------------------------"
-        Write-Host "Login to router and run [" -ForegroundColor Gray -NoNewline
+        Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
         Write-Host "show vpn ipsec sa" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
         Write-Host "---------------------------------------------"
-        $response1 = Read-host "Is the VPN tunnel up? ? [Y or N]"
+        $response1 = Read-host "Is the VPN tunnel up? [Y or N]"
         If($response1 -eq 'Y'){
             Write-Host ("Done configuring router advanced site-2-site vpn for region 1") -ForegroundColor Green
             Write-Host "==============================================================" -ForegroundColor Green
@@ -445,7 +446,7 @@ Else{
 }
 
 If($RunManualSteps){
-    #Ouput information need for local router
+    #Output information need for local router
     Write-Host "Information needed to configure local router vpn:" -ForegroundColor Yellow
     Write-Host ("Azure Location:           {0}" -f $AzureAdvConfigSiteA.LocationName)
     Write-Host ("Azure Peer Public IP:     {0}" -f $azpip.IpAddress)
@@ -470,8 +471,9 @@ If($RunManualSteps){
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
-    Write-Host "Run this command last in ssh session: " -ForegroundColor Gray -NoNewline
-    Write-Host "reboot now" -ForegroundColor Yellow
+    Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
+    Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor Gray
     #endregion
 }
 

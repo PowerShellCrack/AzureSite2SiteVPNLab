@@ -227,7 +227,8 @@ $HomePublicIP = Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
 
 #run if not no variable found in global
 #Make it a global variable so it used for the entire session
-If(!$Global:sharedPSKKey){$Global:sharedPSKKey = New-SharedPSKey}
+#If(!$Global:sharedPSKKey){$Global:sharedPSKKey = New-SharedPSKey}
+$Global:sharedPSKKey = New-SharedPSKey
 #TEST $Global:sharedPSKKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
 
 #build random character set to ensure no duplication (mainly used for storage accounts)

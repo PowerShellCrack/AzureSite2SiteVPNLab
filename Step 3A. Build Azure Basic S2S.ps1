@@ -365,18 +365,20 @@ If($RouterAutomationMode)
     }
     Else{
         #wait for VM to boot completely
+        Write-Host "Completed..." -ForegroundColor Green -NoNewline
         Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
         do {
             Write-Host "." -NoNewline
             Start-Sleep 3
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
+        Write-Host "Ready" -ForegroundColor Green
         Write-Host "--------------------------------------------"
-        Write-Host "Login to router and run [" -ForegroundColor Gray -NoNewline
+        Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
         Write-Host "show vpn ipsec sa" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
         Write-Host "---------------------------------------------"
-        $response1 = Read-host "Is the VPN tunnel up? ? [Y or N]"
+        $response1 = Read-host "Is the VPN tunnel up? [Y or N]"
         If($response1 -eq 'Y'){
             Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
             Write-Host "==============================================" -ForegroundColor Green
@@ -447,8 +449,9 @@ If($RunManualSteps)
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
-    Write-Host "Run this command last in ssh session: " -ForegroundColor Gray -NoNewline
-    Write-Host "reboot now" -ForegroundColor Yellow
+    Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
+    Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor Gray
 }
 
 Stop-Transcript
