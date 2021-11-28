@@ -414,7 +414,7 @@ Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
 #============================================
 #region Azure Network Configurations
 #-----------------------------------------
-$RegionName = $LabPrefix.Replace(" ",'') + '-Basic'
+$RegionName = ($LabPrefix.Replace(" ",'') + '-Basic').ToLower()
 
 $SubnetsFromAzureSiteASpokeCIDR = Get-SimpleSubnets -Cidr $AzureSiteASpokeCIDR
 $SubnetsFromAzureSiteAHubCIDR = Get-SimpleSubnets -Cidr $AzureSiteAHubCIDR
@@ -433,7 +433,7 @@ $AzureSimpleConfig = @{
     VnetGatewayName = $RegionName + '-vngw'
     LocalGatewayName = $RegionName + '-lng'
     PublicIPName = $RegionName + '-pip'
-    ConnectionName = $RegionName + '-connection'
+    ConnectionName = ('connection-to-' + $RegionName)
 
     #Azure vnet CIDR
     VnetCIDRPrefix = $AzureSiteAHubCIDR
@@ -482,7 +482,7 @@ $AzureSimpleVM = @{
 #============================================
 #region Azure Network Configurations - Region 1
 #---------------------------------------------------------
-$RegionAName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteAId)
+$RegionAName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteAId).ToLower()
 
 #Static Properties [EDIT ALLOWED]
 $AzureAdvConfigSiteA = @{
@@ -518,7 +518,7 @@ $AzureAdvConfigSiteA = @{
 
     VnetGatewayName = ($RegionAName).Replace(" ",'').ToLower() + '-vngw'
     LocalGatewayName = $RegionAName + '-lng'
-    VnetConnectionName = ('ConnectionTo-' + $RegionAName).Replace(" ",'')
+    ConnectionName = ('connection-to-' + $RegionAName).Replace(" ",'')
 
     TunnelDescription = ('Gateway to ' + $RegionAName + ' in Azure').Replace("-",' ')
 
@@ -594,7 +594,7 @@ $AzureAdvConfigSiteB = @{
 
     VnetGatewayName = ($RegionBName).Replace(" ",'').ToLower() + '-vngw'
     LocalGatewayName = $RegionBName + '-lng'
-    VnetConnectionName = ('ConnectionTo-' + $RegionBName).Replace(" ",'')
+    ConnectionName = ('connection-to-' + $RegionBName).Replace(" ",'')
 
     TunnelDescription = ('Gateway to ' + $RegionBName + ' in Azure').Replace("-",' ')
 

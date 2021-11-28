@@ -252,10 +252,20 @@ Else{
 
 
 #region 9. Create the VPN connection
-If( ($currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).ConnectionStatus -eq "Connected")
+$currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
+            -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue
+
+If( ($currentGwConnection).ConnectionStatus -eq "Connected")
 {
-    Write-Host ("Gateway is connected to ip [{0}]. Completed!" -f $azpip.IpAddress) -ForegroundColor Cyan
-    Write-Host "=====================================================" -ForegroundColor Green
+    Write-Host ("VPN Gateway is connected to ip [{0}]. No further action needed!" -f $azpip.IpAddress) -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Break
+}
+ElseIf( ($currentGwConnection).ConnectionStatus -eq "Unknown")
+{
+    Write-Host ("VPN Gateway status is unknown. It can take up to three minutes for the status to change!") -ForegroundColor Yellow
+    Write-Host ("Re-run this script at that time to get a fresh status message.") -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
     Break
 }
 Elseif( $null -eq $currentGwConnection)
@@ -281,13 +291,13 @@ Else{
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
         do {
             #cls
-            $response1 = Read-host "Would you like to reset the router configs? [Y or N]"
+            $response1 = Read-host "Would you like to re-run the router configurations? [Y or N]"
         } until ($response1 -eq 'Y')
     }
     If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
-        Write-Host ("Attempting to update vyos router vpn settings to Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+        Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
+        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
@@ -358,9 +368,19 @@ save
 "@
 #endregion
 
+
+#region 11: Build reset vpn config
+$VyOSReset = @"
+restart vpn
+show ipsec vpn sa
+`n
+"@
+#endregion
+
 #Always output script
 $ScriptName = $LogfileName.replace('.log','.script')
 $VyOSFinal -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
+$VyOSConfig['ResetVPNConfigs'] = $False
 
 If($RouterAutomationMode)
 {
@@ -399,7 +419,8 @@ If($RouterAutomationMode)
         If($response1 -eq 'Y'){
             Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
             Write-Host "==============================================" -ForegroundColor Green
-        }Else{
+        }
+        Else{
             Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
             $RunManualSteps = $true
         }
@@ -424,9 +445,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 
         #check current connection
         Write-Host ("Checking Site-2-Site VPN tunnel connection status...") -ForegroundColor Yellow -NoNewline
-
-        If($VyOSConfig['ResetVPNConfigs']){Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName}
-        Start-sleep 10
+        Start-sleep 30
         $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         If($currentGwConnection.ConnectionStatus -eq "Connected")
         {
@@ -436,6 +455,19 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
         Else{
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
+            $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
+            If($response2 -eq 'Y'){
+                Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+                Start-Sleep 10
+                $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject -SetReboot
+                #TEST $VyOSFinalScript.value
+                New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Verbose
+
+                $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSResetScript.Path -Execute -Verbose
+                If(!$Result){
+                    Write-Host "Failed to reset the vpn on vyos router; use manual process" -ForegroundColor Red
+                }
+            }
             $RunManualSteps = $true
         }
     }
