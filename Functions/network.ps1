@@ -334,7 +334,9 @@ Function Get-NextAddress {
         [Parameter(Mandatory=$true,ParameterSetName="Address")]
         [string]$IP,
         [ValidateRange(2,4)]
-        [int]$FromOctet
+        [int]$FromOctet,
+        [ValidateRange(1,254)]
+        [int]$Increment
     )
 
     If($PSCmdlet.ParameterSetName -eq 'Cidr'){
@@ -363,5 +365,13 @@ Function Get-NextAddress {
     }
 
     $c = [System.Net.IpAddress]($z) ## recreate IP address
+
+    If($Increment -ge 1){
+        $i = 0
+        do {
+            $i++
+            $c = Get-NextAddress -ip $c
+        } until ($i -eq $Increment)
+    }
     return $c.ToString()
 }

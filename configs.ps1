@@ -27,10 +27,15 @@ $RegionSiteBId = 'SiteB'
 $AzureSiteBHubCIDR = '10.33.0.0/16' #Always use /16
 $AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
 
-$VyosIsoPath = 'E:\ISOs\VyOS-1.1.8-amd64.iso'
+$DHCPLocation = '<ip, server, or router>'   #defaults to dhcp server not on router; assumes dhcp is on a server
+                                            #if router is specified, dhcp server will be enabled but a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
+
+$DNSServer = "<ip address or ip addresses (comma delimitated)>" #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available ip for VM
 
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
 $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
+
+$VyosIsoPath = 'E:\ISOs\VyOS-1.1.8-amd64.iso'
 
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
@@ -345,7 +350,26 @@ $HyperVConfig = @{
 $NextHop = Get-WmiObject -Class Win32_IP4RouteTable | where { $_.destination -eq '0.0.0.0' -and $_.mask -eq '0.0.0.0'} | Select -ExpandProperty nexthop
 $OnPremNetworkRange = Get-NetworkDetails -CidrAddress $OnPremSubnetCIDR
 $SimpleSubnetsFromOnPremCIDR = Get-SimpleSubnets -Cidr $OnPremSubnetCIDR -Count $OnPremSubnetCount
-$FirstIP = Get-NextAddress -Cidr $SimpleSubnetsFromOnPremCIDR[0]
+$FourthIp = Get-NextAddress -Cidr $SimpleSubnetsFromOnPremCIDR[0] -Increment 3
+
+If(Test-IPAddress $DHCPLocation){
+    $IsDhcpOnRouter = $false
+    $IsDhcpPxeRelayAvailable = $true
+    $DefaultRelayIp = $DHCPLocation
+
+}
+ElseIf($DHCPLocation -eq 'Router'){
+    $IsDhcpOnRouter = $true
+    $IsDhcpPxeRelayAvailable = $false
+    $DefaultRelayIp = $null
+}
+Else{
+    $IsDhcpOnRouter = $false
+    $IsDhcpPxeRelayAvailable = $true
+    $DefaultRelayIp = $FourthIp
+}
+
+
 
 $VyOSConfig = @{
     HostName = ('VyOS').ToLower()
@@ -368,19 +392,35 @@ $VyOSConfig = @{
     BgpAsn = 65168 #CHANGE: set as default asn
 
     UseDNSOption = 'Internal' #CHANGE: 'Internal'<--uses VM DNS like a DC; 'External' <--Use home network DNS configs; 'Internet' <-- Uses Google
-    InternalDNSIP = @(
-        $FirstIP
-    )
-    EnableDHCP = $false
+
+    EnableDHCP = $IsDhcpOnRouter
 
     DHCPPoolsRanges = @{}
 
-    EnablePXEPRelay = $true #True or False: PXE relay is the same a DHCP relay
-    PXERelayIP = $FirstIP  #CHANGE this to actual ip if needed: ie 10.10.1.1
+    EnablePXEPRelay = $IsDhcpPxeRelayAvailable #PXE relay is the same a DHCP relay
+    PXERelayIP = $DefaultRelayIp
 
     EnableNAT = $True
 }
 
+#build dns server list
+$VyOSConfig['InternalDNSIP']  = @()
+$DNSServers = @()
+$DNSServers = $DNSServer.split(',')
+Foreach ($Dns in $DNSServers)
+{
+    If(Test-IPAddress $Dns){
+        $VyOSConfig['InternalDNSIP'] += $Dns
+    }
+}
+#incase there is no valid DNS IP's add fourth IP (we need at least one for router)
+If($VyOSConfig['InternalDNSIP'].count -eq 0){
+    If($FourthIp -notin $VyOSConfig['InternalDNSIP']){
+        $VyOSConfig['InternalDNSIP'] += $FourthIp
+    }
+}
+
+#build vyos local subnet and description
 $SubnetTable = $VyOSConfig['LocalSubnetPrefix']
 Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
@@ -390,6 +430,7 @@ Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
     }
 }
 
+#build vyos dhcp pool (even if its not used)
 $DHCPPoolTable = $VyOSConfig['DHCPPoolsRanges']
 Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
