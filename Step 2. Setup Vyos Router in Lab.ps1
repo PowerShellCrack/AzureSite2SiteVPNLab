@@ -118,8 +118,8 @@ Connect to router and answer the questions below:
   How big of a root partition should I create? (1000MB - 2147MB) [2147]MB: [Enter]
   What would you like to name this image? [1.1.8]: [Enter]
   Which one should I copy to sda? [/config/config.boot]: [Enter]
-  Enter password for user 'VyOS': [Choose a password]
-  Retype password for user 'VyOS': [New password]
+  Enter password for user 'vyos': [Choose a password]
+  Retype password for user 'vyos': [New password]
   Which drive should GRUB modify the boot partition on? [sda]: [Enter]
 "@
 

@@ -28,14 +28,16 @@ $AzureSiteBHubCIDR = '10.33.0.0/16' #Always use /16
 $AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
 
 $DHCPLocation = '<ip, server, or router>'   #defaults to dhcp server not on router; assumes dhcp is on a server
-                                            #if router is specified, dhcp server will be enabled but a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
+                                            #if <router> is specified, dhcp server will be enabled but a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
 
-$DNSServer = "<ip address or ip addresses (comma delimitated)>" #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available ip for VM
+$DNSServer = '<ip, ip addresses (comma delimitated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available ip for VM
+                                                                # if <router> is specified; google ip 8.8.8.8 will be used since no dns server exist on router
 
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
 $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
 
-$VyosIsoPath = 'E:\ISOs\VyOS-1.1.8-amd64.iso' #Add path or use <latest> to get the latest vyos ISO (this is still in BETA)
+$VyosIsoPath = '<default>' #Add path (eg. 'E:\ISOs\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest vyos ISO (this is still in BETA)
+                  #If path left blank or default, it will attempt to download the supported versions (1.1.8)
 
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
@@ -53,50 +55,8 @@ $AzureVnetToVnetPeering = @{
 $RouterAutomationMode = $True
 
 #============================================
-# STOP
+# General Configurations - STOP HERE
 #============================================
-
-# Destination to save the file
-If(Test-Path "$Env:USERPROFILE\downloads"){
-    $destination = "$Env:USERPROFILE\downloads\VyOS-1.1.8-amd64.iso"
-}Else{
-    $destination = "$Env:temp\VyOS-1.1.8-amd64.iso"
-}
-
-# Source file location
-If( !(Test-Path $VyosIsoPath) -and !(Test-Path $destination) )
-{
-    If($VyosIsoPath -eq '<latest>'){
-        $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
-        #Assume if set to latest, force download (no prompt)
-        $VyOSResponse = 'Y'
-        $destination = "$Env:temp\vyos-rolling-latest.iso"
-    }
-    Else{
-        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
-        $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
-    }
-
-    If($VyOSResponse -eq 'Y')
-    {
-        $vyosfilename = (Split-Path $vyossource -Leaf)
-        Write-host ("Attempting to download [{0}] from [{1}]. This can take awhile..." -f $vyosfilename,$vyossource) -ForegroundColor Yellow -NoNewline
-        #Download the file
-        Try{
-            Invoke-WebRequest -Uri $vyossource -OutFile $destination -ErrorAction Stop
-            Write-Host "Done" -ForegroundColor Green
-            $VyosIsoPath = $destination
-        }
-        Catch{
-            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Red
-            break
-        }
-    }
-    Else{
-        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Red
-        break
-    }
-}
 
 ##*=============================================
 ##* Runtime Function - REQUIRED
@@ -279,6 +239,8 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
     Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
     break
 }
+
+
 #============================================
 # AZURE CONNECTION
 #============================================
@@ -315,9 +277,10 @@ If(!$NoAzureCheck){
 }
 #endregion
 #============================================
-# LAB CONFIGURATIONS
+# HYPER-V CHECK
 #============================================
-If($HyperVVMLocation -eq '<default>')
+
+If($HyperVVMLocation -match 'default')
 {
     If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -eq 'Enabled' ){
         $HyperVVMLocation = Get-VMHost | Select -ExpandProperty VirtualMachinePath
@@ -327,7 +290,7 @@ If($HyperVVMLocation -eq '<default>')
     }
 }
 
-If($HyperVHDxLocation -eq '<default>')
+If($HyperVHDxLocation -match 'default')
 {
     If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -eq 'Enabled' ){
         $HyperVHDxLocation = Get-VMHost | Select -ExpandProperty VirtualHardDiskPath
@@ -336,8 +299,74 @@ If($HyperVHDxLocation -eq '<default>')
         $HyperVHDxLocation = 'C:\Users\Public\Documents\Hyper-V\Virtual hard disks\'
     }
 }
+#============================================
+# VYOS ISO CHECK
+#============================================
+If($VyosIsoPath -eq '<latest>'){
+    $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
+    $vyosfilename = (Split-Path $vyossource -Leaf)
+    #Assume if set to latest, force download (no prompt)
+    $VyOSResponse = 'Y'
+    $destination = "$Env:temp\$vyosfilename"
+}
+ElseIf([string]::IsNullOrEmpty($VyosIsoPath) -or ($VyosIsoPath -match 'default') ){
+    $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+    $vyosfilename = (Split-Path $vyossource -Leaf)
+    $VyOSResponse = 'Y'
+    $destination = "$Env:temp\$vyosfilename"
+}
+Else{
+    $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+    $vyosfilename = (Split-Path $vyossource -Leaf)
 
+    # Destination to save the file
+    If(Test-Path $VyosIsoPath -ErrorAction SilentlyContinue){
+        $destination = $VyosIsoPath
+    }
+    ElseIf(Test-Path "$Env:USERPROFILE\downloads" -ErrorAction SilentlyContinue){
+        $destination = "$Env:USERPROFILE\downloads\$vyosfilename"
+    }
+    Else{
+        $destination = "$Env:temp\$vyosfilename"
+    }
+}
 
+If( !(Test-Path $destination) )
+{
+    If($Null -eq $VyOSResponse){
+        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        Write-host ("No iso found in [{0}]" -f $destination) -ForegroundColor Red
+        $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
+    }
+
+    If($VyOSResponse -eq 'Y')
+    {
+        $vyosfilename = (Split-Path $vyossource -Leaf)
+        Write-host ("Attempting to download [{0}] from [{1}].\nThis can take awhile..." -f $vyosfilename,$vyossource) -ForegroundColor Yellow -NoNewline
+        #Download the file
+        Try{
+            Invoke-WebRequest -Uri $vyossource -OutFile $destination -ErrorAction Stop
+            Write-Host "Done" -ForegroundColor Green
+        }
+        Catch{
+            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Red
+            break
+        }
+        Finally{
+            $VyosIsoPath = $destination
+        }
+    }
+    Else{
+        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Red
+        break
+    }
+}Else{
+    $VyosIsoPath = $destination
+}
+
+#============================================
+# CONFIGURATIONS
+#============================================
 #region Hyper-V Configurations
 #------------------------------
 $HyperVConfig = @{
@@ -374,7 +403,7 @@ If(Test-IPAddress $DHCPLocation){
     $DefaultRelayIp = $DHCPLocation
 
 }
-ElseIf($DHCPLocation -eq 'Router'){
+ElseIf($DHCPLocation -match 'router'){
     $IsDhcpOnRouter = $true
     $IsDhcpPxeRelayAvailable = $false
     $DefaultRelayIp = $null
@@ -432,8 +461,9 @@ Foreach ($Dns in $DNSServers)
 }
 #incase there is no valid DNS IP's add fourth IP (we need at least one for router)
 If($VyOSConfig['InternalDNSIP'].count -eq 0){
+    If($DNSServer -match 'Router'){$DNStoAdd = '8.8.8.8'}Else{$DNStoAdd = $FourthIp}
     If($FourthIp -notin $VyOSConfig['InternalDNSIP']){
-        $VyOSConfig['InternalDNSIP'] += $FourthIp
+        $VyOSConfig['InternalDNSIP'] += $DNStoAdd
     }
 }
 
