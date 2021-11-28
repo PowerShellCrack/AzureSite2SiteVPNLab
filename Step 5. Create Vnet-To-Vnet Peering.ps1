@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference = "Stop"
+﻿#Requires -Modules Az
+$ErrorActionPreference = "Stop"
 # https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
 # https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
 

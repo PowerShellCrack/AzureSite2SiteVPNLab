@@ -1,3 +1,4 @@
+#Requires -Modules Az
 $ErrorActionPreference = "Stop"
 
 #region Grab Configurations
@@ -47,7 +48,7 @@ If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -Resource
     $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
                     -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound -Verbose | Set-AzNetworkSecurityGroup
 
-    
+
     Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $VNET -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix `
                 -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue
     $VNET | Set-AzVirtualNetwork -WarningAction SilentlyContinue
@@ -112,7 +113,7 @@ $extensionParams = @{
     ResourceGroupName = $AzureSimpleConfig.ResourceGroupName
     Name = 'enablevmaccess'
     Location = $AzureSimpleConfig.LocationName
-    TypeHandlerVersion = $typeHandlerVersion  
+    TypeHandlerVersion = $typeHandlerVersion
 }
 #add enablevmaccess back with new creds
 Set-AzVMAccessExtension @extensionParams

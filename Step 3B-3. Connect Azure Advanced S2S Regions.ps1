@@ -1,3 +1,4 @@
+#Requires -Modules Az
 # set error preference
 $ErrorActionPreference = "Stop"
 

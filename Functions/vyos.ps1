@@ -96,11 +96,13 @@ Function New-SSHSharedKey{
                 start-sleep 5
                 Write-Host "If prompted, please type $User password`n" -ForegroundColor Cyan
                 #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:~/tmp.pub'" -PassThru -Wait
-                & scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+                Write-Verbose "scp -o 'StrictHostKeyChecking no' `"$id_rsa_Location.pub`" `"${remoteSSHServerLogin}:~/tmp.pub`""
+                scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
                 Write-Host "INFO: Updating authorized_keys on $DestinationIP..." -NoNewLine
                 start-sleep 5
                 Write-Host "If prompted, please type $User password again`n" -ForegroundColor Cyan
-                & ssh -i $remoteSSHServerLogin "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
+                Write-Verbose "ssh `"${remoteSSHServerLogin}`" `"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub`""
+                ssh "${remoteSSHServerLogin}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
                 #TEST & scp -o 'StrictHostKeyChecking no' -i ./.ssh/id_rsa "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
             }
     	}
@@ -202,9 +204,9 @@ Function Initialize-VyattaScript {
     {
         Write-Verbose "Transferring file $Path to $IP as ~/tmp.sh"
         If(Test-Path $RSAFile){
-            & scp -o 'StrictHostKeyChecking no' -i $RSAFile $Path "${remoteSSHServerLogin}:~/tmp.sh"
+            scp -o 'StrictHostKeyChecking no' -i $RSAFile $Path "${remoteSSHServerLogin}:~/tmp.sh"
         }Else{
-            & scp -o 'StrictHostKeyChecking no' $Path "${remoteSSHServerLogin}:~/tmp.sh"
+            scp -o 'StrictHostKeyChecking no' $Path "${remoteSSHServerLogin}:~/tmp.sh"
         }
 
         #TEST scp -o 'StrictHostKeyChecking no' "${remoteSSHServerLogin}:~/.scripts/test.sh" "$env:temp\test.bh"
@@ -228,10 +230,12 @@ Function Initialize-VyattaScript {
             #join all commands as single line separated with &&
             $bashCommand = $bashCommands -join ' && '
             If(Test-Path $RSAFile){
+                Write-Verbose "ssh -i `"$RSAFile`" -J `"$remoteSSHServerLogin`" `"$bashCommand`""
                 #VERBOSE & ssh -v -i $RSAFile $remoteSSHServerLogin $bashCommand
-                & ssh -i $RSAFile $remoteSSHServerLogin $bashCommand
+                ssh -i "$RSAFile" -J "$remoteSSHServerLogin" "$bashCommand"
             }Else{
-                & ssh -i $remoteSSHServerLogin $bashCommand
+                Write-Verbose "ssh `"$remoteSSHServerLogin`" `"$bashCommand`""
+                ssh "$remoteSSHServerLogin" "$bashCommand"
             }
 
         }

@@ -16,6 +16,7 @@
         8. Adds LAN networks to router and sets up LAN configuration
 
 #>
+#Requires -RunAsAdministrator
 
 #https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
 #region Grab Configurations
@@ -182,7 +183,9 @@ do {
     Start-Sleep 5
     $TestIP = Test-Connection $VyOSExternalIP -Count 1 -Quiet
     If (!($TestIP)){
-        Write-Host "Failed! Check IP [run command in router: show int ethernet eth0 brief]" -ForegroundColor Red
+        Write-Host "Failed! Check IP and run command in router [" -ForegroundColor Red -NoNewline
+        Write-Host "show int ethernet eth0 brief" -ForegroundColor Yellow -NoNewline
+        Write-Host "]" -ForegroundColor Red
     } Else {
         Write-Host ("interface is pingable") -ForegroundColor Green
         $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
@@ -196,16 +199,24 @@ Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 start-sleep 10
 
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-$VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*" | Sort Name
-#TEST $net = $VyOSNetworks[0]
-ForEach($net in $VyOSNetworks)
+#$VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*" | Sort Name
+$VyOSNetworks = $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name
+
+#TEST $Network = $VyOSNetworks[0]
+ForEach($Network in $VyOSNetworks)
 {
-    If($net.Name -in $VM.NetworkAdapters.switchname){
-        Write-Host ("Network [{0}] is already attached to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
+    If($Network.Name -in $VM.NetworkAdapters.switchname){
+        Write-Host ("Network [{0}] is already attached to [{1}]" -f $Network.Name,$VM.VMName) -ForegroundColor Green
     }
     Else{
-        Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $net.Name -ErrorAction Stop
-        Write-Host ("Attached network [{0}] to [{1}]" -f $net.Name,$VM.VMName) -ForegroundColor Green
+        Try{
+            Write-Host ("Attaching network [{0}] to [{1}]" -f $Network.Name,$VM.VMName)
+            Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $Network.Name -ErrorAction Stop
+            Write-Host ("Done") -ForegroundColor Green
+        }Catch{
+            Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Red
+            Break
+        }
     }
 }
 
@@ -299,7 +310,7 @@ set service dns forwarding name-server '$NextHop'
 
 If($VyOSConfig.EnablePXEPRelay){
     $i=1
-    ForEach($net in $VyOSNetworks){
+    ForEach($Network in $VyOSNetworks){
         $VyOSLanCmd += @"
 `n
 #Enable DHCP relay (PXE boot) for eth($i):
@@ -336,9 +347,11 @@ commit
 save
 
 "@
-
 #endregion
 
+#Always output script
+$ScriptName = $LogfileName.replace('.log','.script')
+$VyOSLanCmd -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
 
 If($RouterAutomationMode){
     Write-Host "Attempting to automatically configure router's lan settings..." -ForegroundColor Yellow
@@ -346,7 +359,7 @@ If($RouterAutomationMode){
     $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot
 
     #temporary set auto logon ssh keys
-    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force
+    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force -Verbose
 
     $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Execute -Verbose
 
@@ -385,9 +398,8 @@ Else{
 
 If($RunManualSteps){
     #region Copy Paste Mode
-    $VyOSLanCmd -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoslansetup.txt"}
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoslansetup.txt" -ForegroundColor Yellow
+    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSLanCmd -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow

@@ -1,4 +1,6 @@
-﻿#region Grab Configurations
+﻿#Requires -RunAsAdministrator
+
+#region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
@@ -62,12 +64,13 @@ Write-Host "Done" -ForegroundColor Green
 #endregion
 
 $i = 1
-#TEST $Subnet = $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name |Select -first 1
-Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
+#TEST $Subnet = $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name |Select -first 1
+Foreach($Subnet in $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name)
 {
-    $NetworkName = ($vYosConfig.NetPrefix +' ' + $i + ' - ' + $Subnet.Name)
+    $NetworkName = $Subnet.Name
     Write-Host ("Configuring Hyper-V internal switch: [{0}]..." -f $NetworkName) -NoNewline
-    $Description = ("{2} for {1}: {0}" -f $Subnet.Name,$VyOSConfig.LocalSubnetPrefix[$Subnet.Name],$vYosConfig.NetPrefix)
+    $Description = $HyperVConfig.VirtualSwitchNetworks[$Subnet.Name]
+    #$Description = ("{2} for {1}: {0}" -f $Subnet.Name,$VyOSConfig.LocalSubnetPrefix[$Subnet.Name],$vYosConfig.NetPrefix)
     If( $HyperVSwitches | Where Name -eq $NetworkName ){
         Write-Host ("Network already exists. Skipping creation.") -ForegroundColor Green
     }

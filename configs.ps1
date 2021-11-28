@@ -15,6 +15,7 @@ $Email = '' #used only in autoshutdown (for now)
 $VMAdminUser = 'xAdmin'
 $VMAdminPassword = '<password>'
 
+#NOTE: Make sure ALL subnets do not overlap!
 $OnPremSubnetCIDR = '10.120.0.0/16' #Always use /16
 $OnPremSubnetCount = 2
 
@@ -263,19 +264,33 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
 #region connect to Azure if not already connected
 If(!$NoAzureCheck){
     If((Find-Module Az).Version -in (Get-InstalledModule Az -AllVersions).version){
-        Write-Host "Az Module Loaded"
+        Write-Verbose "Az Module Loaded"
     }
     Else{
         Install-Module -Name Az -AllowClobber -Scope AllUsers -Force
     }
 
     Try{
-        $Subscription = Connect-AzureEnvironment -ErrorAction Stop
-        Write-Host ("Using Account ID:   {0} " -f $Subscription.Account.Id) -ForegroundColor Green
-        Write-host ("Using Subscription: {0} " -f $Subscription.Subscription.Name) -ForegroundColor Green
+        #grab current AZ resources
+        $Context = Get-AzContext -ErrorAction Stop
     }
     Catch{
-        Write-Host ("DO NOT CONTINUE. {0} " -f $_.exception.message) -ForegroundColor Red
+        Write-host ("Failed to get Azure context. {0}" -f $_.Exception.Message) -ForegroundColor yellow
+        Clear-AzDefault -ErrorAction SilentlyContinue -Force
+        Clear-AzContext -ErrorAction SilentlyContinue -Force
+        Disconnect-AzAccount -ErrorAction SilentlyContinue
+    }
+    Finally{
+        If($null -eq $Context){
+            Connect-AzAccount -Force
+        }
+        If($null -eq $AzSubscription){
+            $AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
+            Set-AzContext -SubscriptionObject $AzSubscription
+        }
+        Write-Host ("Using Account ID:   {0} " -f $AzSubscription.Account.Id) -ForegroundColor Green
+        Write-host ("Using Subscription: {0} " -f $AzSubscription.Subscription.Name) -ForegroundColor Green
+        Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
     }
 }
 #endregion
@@ -307,11 +322,19 @@ If($HyperVHDxLocation -eq '<default>')
 #------------------------------
 $HyperVConfig = @{
     ChangeLocation = $true
+
     VirtualMachineLocation = $HyperVVMLocation
+
     VirtualHardDiskLocation = $HyperVHDxLocation
+
+    VirtualSwitchNetworks = @{}
+
     EnableSessionMode = $true
+
     ConfigureForVLAN = $False
+
     VLANID = 21
+
     AllowedvLanIdRange = '1-100'
 }
 #endregion
@@ -336,7 +359,7 @@ $VyOSConfig = @{
 
     NextHopSubnet = $NextHop
 
-    ResetVPNConfigs = $true #this will delete the configurations of any vpn settings in VyOS 1 time
+    ResetVPNConfigs = $false # this will delete the configurations of any vpn settings in VyOS
 
     #CIDR for local network
     LocalCIDRPrefix = $OnPremSubnetCIDR
@@ -350,9 +373,10 @@ $VyOSConfig = @{
         $FirstIP
     )
     EnableDHCP = $false
+
     DHCPPoolsRanges = @{}
 
-    EnablePXEPRelay = $true
+    EnablePXEPRelay = $true #True or False: PXE relay is the same a DHCP relay
     PXERelayIP = $FirstIP  #CHANGE this to actual ip if needed: ie 10.10.1.1
 
     EnableNAT = $True
@@ -376,6 +400,16 @@ Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
     }
 }
 
+#build hyper-v's Virtual Switch Networks
+$i = 1
+$VirtualSwitchTable = $HyperVConfig['VirtualSwitchNetworks']
+Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
+{
+    $SwitchName = ($vYosConfig.NetPrefix +' ' + $i + ' - ' + $Subnet.Name)
+    $Description = ("{2} for {1}: {0}" -f $Subnet.Name,$LabPrefix,$vYosConfig.NetPrefix)
+    $VirtualSwitchTable[$SwitchName] = $Description
+    $i++
+}
 #============================================
 ## SIMPLE CONFIGURATION
 #============================================
@@ -398,9 +432,9 @@ $AzureSimpleConfig = @{
     ResourceGroupName = $RegionName + '-rg'
     VnetName = $RegionName + '-vNet'
     VnetGatewayName = $RegionName + '-vngw'
-    LocalGatewayName = $RegionName + '-lgn'
+    LocalGatewayName = $RegionName + '-lng'
     PublicIPName = $RegionName + '-pip'
-    ConnectionName = $RegionName + '-Connection'
+    ConnectionName = $RegionName + '-connection'
 
     #Azure vnet CIDR
     VnetCIDRPrefix = $AzureSiteAHubCIDR
@@ -409,7 +443,7 @@ $AzureSimpleConfig = @{
     #VnetSubnetPrefix = ($AzureSiteAHubCIDR -replace '/\d+$', '/24')
     VnetSubnetPrefix = $SubnetsFromAzureSiteAHubCIDR[0]
 
-    VnetGatewayIpConfigName = $RegionName + '-Gateway-IpConfig'
+    VnetGatewayIpConfigName = $RegionName + '-gateway-ipconfig'
     VnetGatewayPrefix = ($SubnetsFromAzureSiteAHubCIDR[-1] -replace '/\d+$', '/27')
 
     TunnelDescription = ('Gateway to ' + $RegionName + ' in Azure').Replace('-',' ')
@@ -457,24 +491,24 @@ $AzureAdvConfigSiteA = @{
 
     ResourceGroupName = $RegionAName + '-rg'
 
-    VnetSpokeName = $RegionAName + '-Spoke-vNet'
+    VnetSpokeName = $RegionAName + '-spoke-vnet'
     VnetSpokeCIDRPrefix = $AzureSiteASpokeCIDR
-    VnetSpokeSubnetName = $RegionAName + '-Spoke-Subnet'
+    VnetSpokeSubnetName = $RegionAName + '-spoke-subnet'
     #VnetSpokeSubnetAddressPrefix = ($AzureSiteASpokeCIDR -replace '/\d+$', '/24')
     VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteASpokeCIDR[0]
 
-    VnetGatewayIpConfigName = $RegionAName + '-Gateway-IpConfig'
+    VnetGatewayIpConfigName = $RegionAName + '-gateway-ipconfig'
 
-    VnetHubName = $RegionAName + '-Hub-vNet'
+    VnetHubName = $RegionAName + '-hub-vnet'
     VnetHubCIDRPrefix = $AzureSiteAHubCIDR
-    VnetHubSubnetName = $RegionAName + '-Hub-Subnet'
+    VnetHubSubnetName = $RegionAName + '-hub-subnet'
     VnetHubSubnetAddressPrefix = $SubnetsFromAzureSiteAHubCIDR[0]
     VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureSiteAHubCIDR[-56] -replace '/\d+$', '/26')
 
     VnetASN = 65010
 
-    NSGSpokeName = $RegionAName + '-SpokeNSG'
-    NSGGatewayName = $RegionAName + '-GatewayNSG'
+    NSGSpokeName = $RegionAName + '-spoke-nsg'
+    NSGGatewayName = $RegionAName + '-gateway-nsg'
 
     StorageSku = 'standard_lrs'
 
@@ -525,7 +559,7 @@ $AzureVMSiteA = @{
 
 #region Azure Network Configurations - Region 2
 #--------------------------------------------------------
-$RegionBName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteBId)
+$RegionBName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteBId).ToLower()
 
 #Static Properties [EDIT ALLOWED]
 $AzureAdvConfigSiteB = @{
@@ -533,24 +567,24 @@ $AzureAdvConfigSiteB = @{
 
     ResourceGroupName = $RegionBName + '-rg'
 
-    VnetSpokeName = $RegionBName + '-Spoke-vNet'
+    VnetSpokeName = $RegionBName + '-spoke-vnet'
     VnetSpokeCIDRPrefix = $AzureSiteBSpokeCIDR
-    VnetSpokeSubnetName =  $RegionBName + '-Spoke-Subnet'
+    VnetSpokeSubnetName =  $RegionBName + '-spoke-subnet'
     #VnetSpokeSubnetAddressPrefix = ($AzureSiteBSpokeCIDR -replace '/\d+$', '/24')
     VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteBSpokeCIDR[0]
 
-    VnetGatewayIpConfigName = $RegionBName + '-Gateway-IpConfig'
+    VnetGatewayIpConfigName = $RegionBName + '-gateway-ipconfig'
 
-    VnetHubName = $RegionAName + '-Hub-vNet'
+    VnetHubName = $RegionAName + '-Hub-vnet'
     VnetHubCIDRPrefix = $AzureSiteAHubCIDR
-    VnetHubSubnetName = $RegionAName + '-Hub-Subnet'
+    VnetHubSubnetName = $RegionAName + '-hub-subnet'
     VnetHubSubnetAddressPrefix = $SubnetsFromAzureSiteBHubCIDR[0]
     VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureSiteBHubCIDR[-56] -replace '/\d+$', '/26')
 
     VnetASN = 65011
 
-    NSGSpokeName = $RegionBName + '-SpokeNSG'
-    NSGGatewayName = $RegionBName + '-GatewayNSG'
+    NSGSpokeName = $RegionBName + '-spoke-nsg'
+    NSGGatewayName = $RegionBName + '-gateway-nsg'
 
     StorageSku = "standard_lrs"
 

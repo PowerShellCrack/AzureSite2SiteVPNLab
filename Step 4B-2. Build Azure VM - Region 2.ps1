@@ -1,3 +1,4 @@
+#Requires -Modules Az
 $ErrorActionPreference = "Stop"
 
 #region Grab Configurations
@@ -105,7 +106,7 @@ $extensionParams = @{
     ResourceGroupName = $AzureAdvConfigSiteB.ResourceGroupName
     Name = 'enablevmaccess'
     Location = $AzureAdvConfigSiteB.LocationName
-    TypeHandlerVersion = $typeHandlerVersion  
+    TypeHandlerVersion = $typeHandlerVersion
 }
 #add enablevmaccess back with new creds
 Set-AzVMAccessExtension @extensionParams

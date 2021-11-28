@@ -1,3 +1,4 @@
+#Requires -Modules Az
 $ErrorActionPreference = "Stop"
 
 #region Grab Configurations
@@ -279,9 +280,22 @@ Elseif( $null -eq $currentGwConnection)
     }
 }
 Else{
-    Write-Host ("Gateway is not connected. Attempting to update vyos router vpn settings to Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
-    $VyOSConfig['ResetVPNConfigs'] = $true
+    Write-Host ("Gateway is not connected! ") -ForegroundColor Red -NoNewline
+    If($VyOSConfig['ResetVPNConfigs'] -eq $false){
+        do {
+            #cls
+            $response1 = Read-host "Would you like to reset the router configs? [Y or N]"
+        } until ($response1 -eq 'Y')
+    }
+    If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
+    {
+        Write-Host ("Attempting to update vyos router vpn settings to Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
+        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+        $VyOSConfig['ResetVPNConfigs'] = $true
+    }
+    Else{
+        $RouterAutomationMode = $false
+    }
 }
 #endregion
 
@@ -360,7 +374,9 @@ save
 "@
 #endregion
 
-
+#Always output script
+$ScriptName = $LogfileName.replace('.log','.script')
+$VyOSFinal -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
 
 If($RouterAutomationMode)
 {
@@ -445,6 +461,9 @@ Else{
     $RunManualSteps = $true
 }
 
+
+
+
 If($RunManualSteps){
     #Output information need for local router
     Write-Host "Information needed to configure local router vpn:" -ForegroundColor Yellow
@@ -460,12 +479,11 @@ If($RunManualSteps){
     Write-Host ("Local Router Prefix:      {0}" -f $VyOSConfig.LocalCIDRPrefix)
     Write-Host ("Local Router External:    {0}" -f $VyOSConfig.LocalCIDRPrefix)
     Write-host ("Home Public IP:           {0}" -f $HomePublicIP)
-    Write-Host "Be sure to follow a the configuration file 'VyOS_vpn_2site_bgp.md' in the VyOS_setup folder`n" -ForegroundColor Yellow
+    Write-Host "Be sure to follow a the configuration file: '$PSScriptRoot\Logs\$ScriptName'`n" -ForegroundColor Yellow
 
-    $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2sregion1setup.txt"}
     #region Copy Paste Mode
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoss2sregion1setup.txt" -ForegroundColor Yellow
+    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSFinal -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow

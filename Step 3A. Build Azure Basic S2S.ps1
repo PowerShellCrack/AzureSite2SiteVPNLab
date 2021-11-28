@@ -1,3 +1,4 @@
+#Requires -Modules Az
 $ErrorActionPreference = "Stop"
 
 #region Grab Configurations
@@ -53,8 +54,8 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 #region 2. Configure subnets
 Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetSubnetPrefix) -NoNewline
 Try{
-    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
-    $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
+    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
+    $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
@@ -275,10 +276,22 @@ Elseif( $null -eq $currentGwConnection)
     }
 }
 Else{
-    Write-Host ("Gateway is not connected. Attempting to update vyos router vpn settings to Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-    #Grab curretn PSkey to use
-    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-    $VyOSConfig['ResetVPNConfigs'] = $true
+    Write-Host ("Gateway is not connected! ") -ForegroundColor Red -NoNewline
+    If($VyOSConfig['ResetVPNConfigs'] -eq $false){
+        do {
+            #cls
+            $response1 = Read-host "Would you like to reset the router configs? [Y or N]"
+        } until ($response1 -eq 'Y')
+    }
+    If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
+    {
+        Write-Host ("Attempting to update vyos router vpn settings to Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
+        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteA.VnetConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+        $VyOSConfig['ResetVPNConfigs'] = $true
+    }
+    Else{
+        $RouterAutomationMode = $false
+    }
 }
 #endregion
 
@@ -344,6 +357,9 @@ save
 "@
 #endregion
 
+#Always output script
+$ScriptName = $LogfileName.replace('.log','.script')
+$VyOSFinal -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
 
 If($RouterAutomationMode)
 {
@@ -353,7 +369,7 @@ If($RouterAutomationMode)
     $VyOSFinalScript = New-VyattaScript -Value $VyOSFinal -AsObject -SetReboot
     #TEST $VyOSFinalScript.value
     #temporary set auto logon ssh keys
-    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos'
+    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Verbose
 
     $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
 
@@ -428,6 +444,7 @@ Else{
     $RunManualSteps = $true
 }
 
+
 #Run manual mode if automation steps fail or is not enabled
 If($RunManualSteps)
 {
@@ -439,11 +456,11 @@ If($RunManualSteps)
     Write-host ("Shared Key (PSK):    {0}" -f $Global:sharedPSKKey)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
-    Write-Host "Be sure to follow a the configuration file 'VyOS_vpn_basic.md' in the VyOS_setup folder" -ForegroundColor Yellow
+    Write-Host "Be sure to follow a the configuration file: '$PSScriptRoot\Logs\$ScriptName'`n" -ForegroundColor Yellow
 
-    $VyOSFinal -split '\n' | %{$_ | Add-Content "$PSScriptRoot\Logs\vyoss2ssimplesetup.txt"}
+    #region Copy Paste Mode
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\vyoss2ssimplesetup.txt" -ForegroundColor Yellow
+    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSFinal -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
