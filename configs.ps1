@@ -35,7 +35,7 @@ $DNSServer = "<ip address or ip addresses (comma delimitated)>" #if not specifie
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
 $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
 
-$VyosIsoPath = 'E:\ISOs\VyOS-1.1.8-amd64.iso'
+$VyosIsoPath = 'E:\ISOs\VyOS-1.1.8-amd64.iso' #Add path or use <latest> to get the latest vyos ISO (this is still in BETA)
 
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
@@ -66,18 +66,34 @@ If(Test-Path "$Env:USERPROFILE\downloads"){
 # Source file location
 If( !(Test-Path $VyosIsoPath) -and !(Test-Path $destination) )
 {
-    $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
-    $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
-    If($VyOSResponse -eq 'Y')
-    {
-        Write-host "Attempting to download [vyos-1.1.8-amd64.iso] from [$vyossource]. This can take awhile..." -ForegroundColor Yellow -NoNewline
-        #Download the file
-        Invoke-WebRequest -Uri $vyossource -OutFile $destination
-        Write-Host "Done" -ForegroundColor Green
-        $VyosIsoPath = $destination
+    If($VyosIsoPath -eq '<latest>'){
+        $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
+        #Assume if set to latest, force download (no prompt)
+        $VyOSResponse = 'Y'
+        $destination = "$Env:temp\vyos-rolling-latest.iso"
     }
     Else{
-        Write-host "You must download the vyos iso before continuing! [$vyossource]" -ForegroundColor Red
+        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
+    }
+
+    If($VyOSResponse -eq 'Y')
+    {
+        $vyosfilename = (Split-Path $vyossource -Leaf)
+        Write-host ("Attempting to download [{0}] from [{1}]. This can take awhile..." -f $vyosfilename,$vyossource) -ForegroundColor Yellow -NoNewline
+        #Download the file
+        Try{
+            Invoke-WebRequest -Uri $vyossource -OutFile $destination -ErrorAction Stop
+            Write-Host "Done" -ForegroundColor Green
+            $VyosIsoPath = $destination
+        }
+        Catch{
+            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Red
+            break
+        }
+    }
+    Else{
+        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Red
         break
     }
 }
@@ -395,10 +411,11 @@ $VyOSConfig = @{
 
     EnableDHCP = $IsDhcpOnRouter
 
+    DhcpRelayIP = $DefaultRelayIp
+
     DHCPPoolsRanges = @{}
 
-    EnablePXEPRelay = $IsDhcpPxeRelayAvailable #PXE relay is the same a DHCP relay
-    PXERelayIP = $DefaultRelayIp
+    EnablePXERelay = $IsDhcpPxeRelayAvailable #True or False: PXE relay may be same a DHCP relay
 
     EnableNAT = $True
 }

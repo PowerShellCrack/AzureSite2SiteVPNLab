@@ -4,8 +4,9 @@
 
 ## 1.3.4 - November 28, 2021
 
-- Added dns and dhcp option in config; autobuilds values for azure vm
-- 
+- Added dns and dhcp option in config; auto builds values for azure vm
+- Added vyatta cmd function; provides a in prompt cmd's remotely if needed
+- BETA: working support for latest vyos image
 
 ## 1.3.3 - November 27, 2021
 

@@ -307,7 +307,7 @@ set service dns forwarding name-server '$NextHop'
     }
 }
 
-If($VyOSConfig.EnablePXEPRelay){
+If($VyOSConfig.EnablePXERelay){
     $i=1
     ForEach($Network in $VyOSNetworks){
         $VyOSLanCmd += @"
@@ -322,7 +322,7 @@ If(!$VyOSConfig.EnableDHCP){
     $VyOSLanCmd += @"
 `n
 #If DHCP disabled, Set the IP address of the other DHCP server:
-set service dhcp-relay server '$($VyOSConfig.PXERelayIP)'
+set service dhcp-relay server '$($VyOSConfig.DhcpRelayIP)'
 
 #Discard DHCP packages already containing relay agent
 set service dhcp-relay relay-options relay-agents-packets discard
@@ -358,9 +358,9 @@ If($RouterAutomationMode){
     $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot
 
     #temporary set auto logon ssh keys
-    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Force -Verbose
+    New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Force -Verbose
 
-    $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Execute -Verbose
+    $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Verbose
 
     $Result
 

@@ -388,7 +388,7 @@ save
 #region 11: Build reset vpn config
 $VyOSReset = @"
 restart vpn
-show ipsec vpn sa
+run show ipsec vpn sa
 `n
 "@
 #endregion
@@ -406,9 +406,9 @@ If($RouterAutomationMode)
     $VyOSFinalScript = New-VyattaScript -Value $VyOSFinal -AsObject -SetReboot
 
     #temporary set auto logon ssh keys
-    New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos'
+    New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos'
 
-    $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Execute -Verbose
+    $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSFinalScript.Path -Verbose
 
     $Result
 
@@ -477,9 +477,9 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                 Start-Sleep 10
                 $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject -SetReboot
                 #TEST $VyOSFinalScript.value
-                New-SSHSharedKey -DestinationIP $VyOSExternalIP -User 'vyos' -Verbose
+                New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
 
-                $Result = Initialize-VyattaScript -IP $VyOSExternalIP -Path $VyOSResetScript.Path -Execute -Verbose
+                $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSResetScript.Path -Verbose
                 If(!$Result){
                     Write-Host "Failed to reset the vpn on vyos router; use manual process" -ForegroundColor Red
                 }
