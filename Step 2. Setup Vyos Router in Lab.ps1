@@ -143,7 +143,6 @@ $VyOSSteps = @"
 Enabling network and SSH on the virtual router
 Connect to router and answer the questions below:
 =================================================
-  vyos Base Configuration
   vyos login: vyos
   Password: [New password]
   vyos@vyos:~$ configure
@@ -170,12 +169,12 @@ Write-Host "If steps completed successfully, You can now ssh into the router ins
 do {
     If(Test-Path "$env:temp\VyOSextip.txt"){
         $VyOSExistingIP = Get-Content "$env:temp\VyOSextip.txt"
-        $response1 = Read-host "Is your $($VM.VMName) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
+        $response1 = Read-host "Is your $($VM.Name) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
     }
     If($response1 -eq 'Y'){
         $VyOSExternalIP = $VyOSExistingIP
     }Else{
-        $VyOSExternalIP = Read-host "What is your $($VM.VMName) router's eth0 IP Address? [eg. 192.168.1.2]"
+        $VyOSExternalIP = Read-host "What is your $($VM.Name) router's eth0 IP Address? [eg. 192.168.1.2]"
     }
     Remove-Item "$env:temp\VyOSextip.txt" -Force -ErrorAction SilentlyContinue | Out-Null
 

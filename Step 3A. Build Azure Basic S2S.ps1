@@ -1,5 +1,7 @@
-#Requires -Modules Az
 $ErrorActionPreference = "Stop"
+#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+
 
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
@@ -54,8 +56,8 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 #region 2. Configure subnets
 Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetSubnetPrefix) -NoNewline
 Try{
-    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
-    $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
+    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
+    $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{

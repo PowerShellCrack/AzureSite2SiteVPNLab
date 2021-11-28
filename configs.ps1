@@ -290,7 +290,6 @@ If(!$NoAzureCheck){
         }
         Write-Host ("Using Account ID:   {0} " -f $AzSubscription.Account.Id) -ForegroundColor Green
         Write-host ("Using Subscription: {0} " -f $AzSubscription.Subscription.Name) -ForegroundColor Green
-        Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
     }
 }
 #endregion

@@ -49,18 +49,22 @@ If($null -eq $InternetConnectedAdapter){ Write-Host ("There is no known physical
 $HyperVSwitches = Get-VMSwitch
 If ($null -eq ($HyperVSwitches | Where SwitchType -eq 'External') )
 {
-    New-VMSwitch -Name 'External' -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -Notes 'External Switch'
+    New-VMSwitch -Name 'External' -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -Notes 'External Switch' | Out-Null
 }
 ElseIf( ($InternetConnectedAdapter.InterfaceGuid -replace '^{|}$','') -notin ($HyperVSwitches | Where SwitchType -eq 'External').NetAdapterInterfaceGuid.Guid){
     #Check If external is connect to a internet connected adapter
     Try{
-        Set-VMSwitch -VMSwitch ($HyperVSwitches | Where SwitchType -eq 'External') -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -ErrorAction Stop
-    }Catch{
+        Set-VMSwitch -VMSwitch ($HyperVSwitches | Where SwitchType -eq 'External') -NetAdapterName $InternetConnectedAdapter.Name -AllowManagementOS $true -ErrorAction Stop | Out-Null
+        Write-Host ("Changed to [{0}]" -f $InternetConnectedAdapter.Name) -ForegroundColor Yellow
+    }
+    Catch{
         Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Red
     }
 }
+Else{
+    Write-Host "Done" -ForegroundColor Green
+}
 
-Write-Host "Done" -ForegroundColor Green
 #endregion
 
 $i = 1
@@ -68,14 +72,14 @@ $i = 1
 Foreach($Subnet in $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name)
 {
     $NetworkName = $Subnet.Name
-    Write-Host ("Configuring Hyper-V internal switch: [{0}]..." -f $NetworkName) -NoNewline
+    Write-Host ("Configuring Hyper-V internal switch [{0}]..." -f $NetworkName) -NoNewline
     $Description = $HyperVConfig.VirtualSwitchNetworks[$Subnet.Name]
     #$Description = ("{2} for {1}: {0}" -f $Subnet.Name,$VyOSConfig.LocalSubnetPrefix[$Subnet.Name],$vYosConfig.NetPrefix)
     If( $HyperVSwitches | Where Name -eq $NetworkName ){
         Write-Host ("Network already exists. Skipping creation.") -ForegroundColor Green
     }
     Else{
-        New-VMSwitch -Name $NetworkName -SwitchType Private -Notes $Description
+        New-VMSwitch -Name $NetworkName -SwitchType Private -Notes $Description | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     $i++

@@ -1,6 +1,6 @@
-#Requires -Modules Az
-# set error preference
 $ErrorActionPreference = "Stop"
+#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)

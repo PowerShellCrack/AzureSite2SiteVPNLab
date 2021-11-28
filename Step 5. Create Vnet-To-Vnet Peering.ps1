@@ -1,5 +1,7 @@
-﻿#Requires -Modules Az
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
+#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+
 # https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
 # https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
 

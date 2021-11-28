@@ -22,6 +22,7 @@ Function New-SSHSharedKey{
 
     .LINK
     http://vcloud-lab.com/entries/devops/How-to-Setup-Passwordless-SSH-Login-on-Windows
+    https://slowkow.com/notes/ssh-tutorial/
     #>
 	[CmdletBinding(
 		SupportsShouldProcess=$True,
@@ -94,13 +95,12 @@ Function New-SSHSharedKey{
             If(Test-Path "$env:USERPROFILE\.ssh\id_rsa.pub"){
                 Write-Host "INFO: Copying $env:USERPROFILE\.ssh\id_rsa.pub to $DestinationIP..." -NoNewLine
                 start-sleep 5
-                Write-Host "If prompted, please type $User password`n" -ForegroundColor Cyan
+                Write-Host "When prompted, please type $User password..." -ForegroundColor Cyan
                 #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:~/tmp.pub'" -PassThru -Wait
                 Write-Verbose "scp -o 'StrictHostKeyChecking no' `"$id_rsa_Location.pub`" `"${remoteSSHServerLogin}:~/tmp.pub`""
                 scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
                 Write-Host "INFO: Updating authorized_keys on $DestinationIP..." -NoNewLine
                 start-sleep 5
-                Write-Host "If prompted, please type $User password again`n" -ForegroundColor Cyan
                 Write-Verbose "ssh `"${remoteSSHServerLogin}`" `"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub`""
                 ssh "${remoteSSHServerLogin}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
                 #TEST & scp -o 'StrictHostKeyChecking no' -i ./.ssh/id_rsa "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
@@ -230,12 +230,12 @@ Function Initialize-VyattaScript {
             #join all commands as single line separated with &&
             $bashCommand = $bashCommands -join ' && '
             If(Test-Path $RSAFile){
-                Write-Verbose "ssh -i `"$RSAFile`" -J `"$remoteSSHServerLogin`" `"$bashCommand`""
+                Write-Verbose "ssh -i `"$RSAFile`" `"$remoteSSHServerLogin`" $bashCommand"
                 #VERBOSE & ssh -v -i $RSAFile $remoteSSHServerLogin $bashCommand
-                ssh -i "$RSAFile" -J "$remoteSSHServerLogin" "$bashCommand"
+                ssh -i "$RSAFile" "$remoteSSHServerLogin" $bashCommand
             }Else{
-                Write-Verbose "ssh `"$remoteSSHServerLogin`" `"$bashCommand`""
-                ssh "$remoteSSHServerLogin" "$bashCommand"
+                Write-Verbose "ssh `"$remoteSSHServerLogin`" $bashCommand"
+                ssh "$remoteSSHServerLogin" $bashCommand
             }
 
         }
