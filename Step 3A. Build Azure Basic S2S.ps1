@@ -45,7 +45,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }Else{
     Write-Host ("Using Azure resource group [{0}]" -f $AzureSimpleConfig.ResourceGroupName) -ForegroundColor Green
@@ -61,7 +61,7 @@ Try{
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
-    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
 }
 #endregion
 
@@ -75,7 +75,7 @@ If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupNam
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -95,7 +95,7 @@ If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vnet | Where Name -eq 'Ga
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 
@@ -113,7 +113,7 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -Re
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -132,7 +132,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpN
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -150,7 +150,7 @@ If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNet
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Redd
     }
 }
 Else{
@@ -175,7 +175,7 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -R
     }
     Catch{
         $stopwatch.Stop()
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -229,7 +229,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewa
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
@@ -242,7 +242,7 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -279,11 +279,11 @@ Elseif( $null -eq $currentGwConnection)
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
             -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -421,7 +421,7 @@ If($RouterAutomationMode)
             Write-Host "==============================================" -ForegroundColor Green
         }
         Else{
-            Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
+            Write-Host "Automation may have failed, will attempt to fix..." -ForegroundColor Red
             $RunManualSteps = $true
         }
 
@@ -457,15 +457,19 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
             $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($response2 -eq 'Y'){
-                Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+                Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName `
+                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:sharedPSKKey -Force | Out-Null
+
+                Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
+                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Force | Out-Null
                 Start-Sleep 10
-                $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject -SetReboot
+                $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject
                 #TEST $VyOSFinalScript.value
                 New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
 
                 $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSResetScript.Path -Verbose
                 If(!$Result){
-                    Write-Host "Failed to reset the vpn on vyos router; use manual process" -ForegroundColor Red
+                    Write-Host "The reset may have failed on vyos router; check vpn status and use manual process if necessary" -ForegroundColor Black -BackgroundColor Red
                 }
             }
             $RunManualSteps = $true

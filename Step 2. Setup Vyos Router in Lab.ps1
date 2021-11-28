@@ -157,8 +157,8 @@ Connect to router and answer the questions below:
 do {
     #cls
     Write-Host $VyOSSteps -ForegroundColor Gray
-    Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
     Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
+    Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
     $response1 = Read-host "Did you complete the steps above? [Y or N]"
 } until ($response1 -eq 'Y')
 Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting VM console" -ForegroundColor Yellow
@@ -209,11 +209,12 @@ ForEach($Network in $VyOSNetworks)
     }
     Else{
         Try{
-            Write-Host ("Attaching network [{0}] to [{1}]" -f $Network.Name,$VM.VMName)
+            Write-Host ("Attaching network [{0}] to [{1}]..." -f $Network.Name,$VM.VMName) -NoNewline
             Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $Network.Name -ErrorAction Stop
             Write-Host ("Done") -ForegroundColor Green
-        }Catch{
-            Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Red
+        }
+        Catch{
+            Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
             Break
         }
     }
@@ -383,8 +384,9 @@ If($RouterAutomationMode){
             Write-Host ("Done configuring router interfaces") -ForegroundColor Green
             Write-Host "--------------------------------------------------" -ForegroundColor Green
             $RunManualSteps = $false
-        }Else{
-            Write-Host "Automation may have failed try running the commands manually" -ForegroundColor Red
+        }
+        Else{
+            Write-Host "Automation may have failed, try running the commands manually" -ForegroundColor Black -BackgroundColor Red
             $RunManualSteps = $true
         }
     }

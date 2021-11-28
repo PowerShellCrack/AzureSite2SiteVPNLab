@@ -349,7 +349,7 @@ If( !(Test-Path $destination) )
             Write-Host "Done" -ForegroundColor Green
         }
         Catch{
-            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Red
+            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Black -BackgroundColor Red
             break
         }
         Finally{
@@ -357,7 +357,7 @@ If( !(Test-Path $destination) )
         }
     }
     Else{
-        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Red
+        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
         break
     }
 }Else{
