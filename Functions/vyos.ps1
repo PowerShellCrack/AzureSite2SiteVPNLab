@@ -109,8 +109,9 @@ Function New-SSHSharedKey{
     	else
     	{
     		Write-Host "INFO: $env:USERPROFILE\.ssh\id_rsa already exist, reading rsa key..." -ForegroundColor Cyan
-    		$sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -y -f ./.ssh/id_rsa' -PassThru -Wait
-            If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}Else{$sshrsakey.stdout}
+    		#$sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -y -f ./.ssh/id_rsa' -PassThru -Wait
+    		#If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}Else{$sshrsakey.stdout}
+            If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}
     	}
 
     	#Write-Host "DONE: Try running command: 'ssh $User@$DestinationIP'; Now it will not prompt for password" -ForegroundColor Green

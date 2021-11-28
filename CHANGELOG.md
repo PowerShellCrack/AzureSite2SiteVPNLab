@@ -4,13 +4,12 @@
 ## 1.3.3 - November 27, 2021
 
 - Simplified Azure connection; removed Connect-AzureEnvironment function; fixed azure subscription selection
-- Added requires check for each script.
+- Added requires check for each script; Fixed require module statement for Az; must specify individual modules.
 - Forced vyos scripts output always even if automatic; named same as log
 - Fixed Vyos lan switch attachments; created more than needed when similar named networks existed
 - Changed resources to lowercase; easier readability in Azure
 - Fixed vyos reset function; disabled function for region 2
 - Fixed ssh keygen process; less password prompts
-- Fixed require module statement for Az; must specify individual modules.
 
 ## 1.3.2 - November 26, 2021
 

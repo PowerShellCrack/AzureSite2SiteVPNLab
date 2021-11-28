@@ -170,12 +170,11 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -R
         New-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                 -Location $AzureSimpleConfig.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1 | Out-Null
         $stopwatch.Stop()
-        $totalSecs =  [math]::Round($stopwatch.Elapsed.TotalSeconds,0)
-        Write-Host ("Completed in [{0}] seconds" -f $totalSecs) -ForegroundColor Green
+        $totalSecs = [timespan]::fromseconds($stopwatch.Elapsed.TotalSeconds)
+        Write-Host ("Completed [{0:hh\:mm\:ss}]" -f $totalSecs) -ForegroundColor Green
     }
     Catch{
         $stopwatch.Stop()
-        $totalSecs =  [math]::Round($stopwatch.Elapsed.TotalSeconds,0)
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
     }
 }
