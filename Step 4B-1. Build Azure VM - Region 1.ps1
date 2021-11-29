@@ -1,5 +1,5 @@
 Param(
-    [ValidatePattern("^[-_]|[^a-zA-Z0-9-_]")]
+    [ValidatePattern("^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$")]
     [string]$VMName
 )
 $ErrorActionPreference = "Stop"
@@ -38,7 +38,7 @@ If($VMName)
         Write-Host ("Name already exists. You must specify a different vm name other than [{0}]" -f $VMName) -ForegroundColor Red
         do {
             $VMresponse = Read-host "Whats the new VM name?"
-        } until ($VMresponse -match "^[-_]|[^a-zA-Z0-9-_]")
+        } until ($VMresponse -match "^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$")
     }
     $computername = $VMName | Set-TruncateString -length 11
     $newVMname =  $VMName.ToLower()
