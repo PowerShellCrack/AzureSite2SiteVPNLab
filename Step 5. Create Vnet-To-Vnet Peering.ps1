@@ -20,31 +20,52 @@ Else{
 #endregion
 
 # connect to first tenant to setup vNET peering
-Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteATenantID
-Select-AzSubscription -Tenant $AzureVnetToVnetPeering.SiteATenantID
+If( ($AzureVnetToVnetPeering.SiteATenantID -notmatch 'TenantAID') -and ($AzureVnetToVnetPeering.SiteASubscriptionID -notmatch 'SubscriptionAID') ){
+  Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteATenantID
+  Select-AzSubscription -Subscription $AzureVnetToVnetPeering.SiteASubscriptionID
+}
+Else{
+  Write-Host ("You must specify Tenant A and Subscription A Id's in [config.ps1] before continuing") -ForegroundColor Black -BackgroundColor Red
+  Break
+}
 
-$vNetA=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubSubnetName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
-Add-AzVirtualNetworkPeering `
-  -Name 'ToSiteBHub' `
-  -VirtualNetwork $vNetA `
-  -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteBSubscriptionID)/resourceGroups//$($AzureAdvConfigSiteB.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteB.VnetHubSubnetName)" `
-  -AllowGatewayTransit `
-  -AllowForwardedTraffic
+$vNetA=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+Try{
+  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteBSpoke') -ForegroundColor Yellow -NoNewline
+  Add-AzVirtualNetworkPeering -Name 'ToSiteBSpoke' -VirtualNetwork $vNetA `
+      -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteBSubscriptionID)/resourceGroups//$($AzureAdvConfigSiteB.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteB.VnetHubSubnetName)" `
+      -AllowGatewayTransit -AllowForwardedTraffic | Out-Null
+  Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
+Finally{
+  Clear-AzDefault
+}
 
-Clear-AzDefault
+If( ($AzureVnetToVnetPeering.SiteBTenantID -notmatch 'TenantBID') -and ($AzureVnetToVnetPeering.SiteBSubscriptionID -notmatch 'SubscriptionBID') ){
+  Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteBTenantID
+  Select-AzSubscription -Subscription $AzureVnetToVnetPeering.SiteBSubscriptionID
+}
+Else{
+  Write-Host ("You must specify Tenant A and Subscription B Id's in [config.ps1] before continuing") -ForegroundColor Black -BackgroundColor Red
+  Break
+}
 
-
-# connect to second tenant to complete vNET peering
-Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteBTenantID
-Select-AzSubscription -Tenant $AzureVnetToVnetPeering.SiteBTenantID
-
-
-$vNetB=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetHubSubnetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
-Add-AzVirtualNetworkPeering `
-  -Name 'ToSiteAHub' `
-  -VirtualNetwork $vNetB `
-  -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteASubscriptionID)/resourceGroups/$($AzureAdvConfigSiteA.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteA.VnetHubSubnetName)" `
-  -AllowForwardedTraffic `
-  -UseRemoteGateways
-
-Clear-AzDefault
+$vNetB=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
+Try{
+  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteASpoke') -ForegroundColor Yellow -NoNewline
+  Add-AzVirtualNetworkPeering -Name 'ToSiteASpoke' -VirtualNetwork $vNetB `
+          -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteASubscriptionID)/resourceGroups/$($AzureAdvConfigSiteA.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteA.VnetHubSubnetName)" `
+          -AllowForwardedTraffic -UseRemoteGateways | Out-Null
+  Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
+Finally{
+  Clear-AzDefault
+}

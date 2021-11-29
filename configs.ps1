@@ -269,9 +269,10 @@ If(!$NoAzureCheck){
         }
         If($null -eq $AzSubscription){
             $AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
-            Set-AzContext -SubscriptionObject $AzSubscription
+            Set-AzContext -Tenant $AzSubscription.Tenant.id -SubscriptionId $AzSubscription.Subscription.id | Out-Null
         }
         Write-Host ("Using Account ID:   {0} " -f $AzSubscription.Account.Id) -ForegroundColor Green
+        Write-Host ("Using Tenant ID:   {0} " -f $AzSubscription.Tenant.Id) -ForegroundColor Green
         Write-host ("Using Subscription: {0} " -f $AzSubscription.Subscription.Name) -ForegroundColor Green
     }
 }
@@ -547,14 +548,17 @@ $AzureSimpleConfig = @{
 $AzureSimpleVM = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
-    ComputerName = ($RegionName + '-vm1' | Set-TruncateString -length 15)
+    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm1'
     Name = $RegionName + '-vm1'
-    Size = 'Standard_DS3'
+    Size = 'Standard_B1ms'
 
-    NICName = $LabPrefix + '-svrb-nic'
+    NICName = $LabPrefix + '-vm1-nic'
 
-    SubnetAddressPrefix = $AzureSimpleConfig.VnetSubnetPrefix
+    VNetName = $AzureSimpleConfig.VnetName
     VnetAddressPrefix = $AzureSimpleConfig.VnetCIDRPrefix
+
+    SubnetName = $AzureSimpleConfig.DefaultSubnetName
+    SubnetAddressPrefix = $AzureSimpleConfig.VnetSubnetPrefix
 
     NSGName = $RegionName + '-nsg'
 
@@ -619,9 +623,9 @@ $AzureAdvConfigSiteA = @{
 $AzureVMSiteA = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
-    ComputerName = ($LabPrefix + '-dc2' | Set-TruncateString -length 15)
-    Name = $LabPrefix + '-dc2'
-    Size = 'Standard_DS3'
+    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 9) + '-a-vm1'
+    Name = $LabPrefix + '-vm1'
+    Size = 'Standard_B2s'
 
     PublisherName = 'MicrosoftWindowsServer'
     Offer = 'WindowsServer'
@@ -629,11 +633,14 @@ $AzureVMSiteA = @{
     Version = 'latest'
 
     NICName = $RegionAName + '-vm1-nic'
-    SubnetName = $AzureAdvConfigSiteA.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
+
+    VNetName = $AzureAdvConfigSiteA.VnetSpokeName
     VnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
 
-    NSGName = $RegionAName + '-vm-nsg'
+    SubnetName = $AzureAdvConfigSiteA.VnetSpokeSubnetName
+    SubnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
+
+    NSGName = $RegionAName + '-nsg'
 
     EnableAutoshutdown = $true
     AutoShutdownNotificationType = $Email # set to either an email or webhook url
@@ -694,9 +701,9 @@ $AzureAdvConfigSiteB = @{
 $AzureVMSiteB = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
-    ComputerName = ($RegionBName + '-vm1' | Set-TruncateString -length 15)
+    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 9) + '-b-vm1'
     Name = $RegionBName + '-vm1'
-    Size = 'Standard_D2s_v3'
+    Size = 'Standard_B2s'
 
     PublisherName = 'MicrosoftWindowsServer'
     Offer = 'WindowsServer'
@@ -704,11 +711,14 @@ $AzureVMSiteB = @{
     Version = 'latest'
 
     NICName = $RegionBName + '-vm1-nic'
-    SubnetName = $AzureAdvConfigSiteB.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix
+
+    VNetName = $AzureAdvConfigSiteB.VnetSpokeName
     VnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix
 
-    NSGName = $RegionBName + '-vm-nsg'
+    SubnetName = $AzureAdvConfigSiteB.VnetSpokeSubnetName
+    SubnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix
+
+    NSGName = $RegionBName + '-nsg'
 
     EnableAutoshutdown = $true
     AutoShutdownNotificationType = $Email # set to either an email or webhook url

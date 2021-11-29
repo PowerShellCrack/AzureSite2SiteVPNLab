@@ -1,6 +1,9 @@
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+#https://docs.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell#create-a-virtual-machine
+#https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell
+#https://docs.microsoft.com/en-us/powershell/module/az.compute/new-azvm?view=azps-2.8.0
 
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
@@ -17,119 +20,184 @@ Else{
 
 
 #start transcript
-$LogfileName = "$RegionBName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$RegionName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
-#https://docs.microsoft.com/en-us/powershell/module/az.compute/new-azvm?view=azps-2.8.0
-#Example 3: Create a VM from a marketplace image without a Public IP
-#region Create a resource group:
-If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
-    New-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName
+
+#region 1. Create a resource group:
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue))
+{
+    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureAdvConfigSiteB.ResourceGroupName) -NoNewline
+    Try{
+        New-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    }
+}Else{
+    Write-Host ("Using Azure resource group [{0}]" -f $AzureAdvConfigSiteB.ResourceGroupName) -ForegroundColor Green
 }
 #endregion
 
+
 #region Create Storage Account
-$storageName = ($RegionBName +'-' + $Global:randomChar).ToLower() -replace '[\W]', ''
-If(-Not(Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $storageName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
-    #build random char for storage name
-    $Global:randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
-    $storageName = ($RegionBName +'-' + $Global:randomChar).ToLower() -replace '[\W]', ''
-    $storageAcc = New-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $storageName -SkuName $AzureAdvConfigSiteB.StorageSku -Location $AzureAdvConfigSiteB.LocationName -Kind Storage -verbose
+#build random char for storage name
+
+If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
+            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureAdvConfigSiteB.StorageSku} | Select -First 1)){
+    Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -NoNewline
+    Try{
+        $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
+        $storageName = ($RegionName +'-' + $randomChar).ToLower() -replace '[\W]', ''
+
+        $StorageAccount = New-AzStorageAccount -Name $storageName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -SkuName $AzureAdvConfigSiteB.StorageSku `
+                            -Location $AzureAdvConfigSiteB.LocationName -Kind Storage | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+Else{
+    Write-Host ("Using Azure storage account [{0}]" -f $StorageAccount.StorageAccountName) -ForegroundColor Green
 }
 #endregion
+
 
 #region Creating a new NSG to allow PS Remoting Port 5986 and RDP Port 3389
 #grab Vnet for NSG and NIC configurations
-$VNET = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VNETSpokeName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
+$vNet = Get-AzVirtualNetwork -Name $AzureVMSiteB.VNetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue
 
 If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+    Write-Host ("Creating Azure network security group [{0}]..." -f $AzureVMSiteB.NSGName) -NoNewline
+    Try{
+        $NSG = New-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+        $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
+                        -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-    $NSG = New-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -Verbose
-    $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound -Verbose | Set-AzNetworkSecurityGroup
-
-    Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VNETSpokeSubnetName -VirtualNetwork $VNET -AddressPrefix $AzureAdvConfigSiteB.VNETSpokeSubnetAddressPrefix -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue
-    $VNET | Set-AzVirtualNetwork -WarningAction SilentlyContinue
+        Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSubnetPrefix `
+                    -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue | Out-Null
+        $vNet | Set-AzVirtualNetwork -WarningAction SilentlyContinue | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+Else{
+    Write-Host ("Using Azure network security group [{0}]" -f $AzureVMSiteB.NSGName) -ForegroundColor Green
 }
 #endregion
 
-#region Attach VM to second subnet which should be defaultsubnet
-$NIC = New-AzNetworkInterface -Name $AzureVMSiteB.NICName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -SubnetId $Vnet.Subnets[0].Id
-#endregion
-
-#region build local admin credentials for VM
-$LocalAdminSecurePassword = ConvertTo-SecureString $AzureVMSiteB.LocalAdminPassword -AsPlainText -Force
-$Credential = New-Object System.Management.Automation.PSCredential ($AzureVMSiteB.LocalAdminUser, $LocalAdminSecurePassword);
-#endregion
 
 #region Build VM configurations
-$VirtualMachine = New-AzVMConfig -VMName $AzureVMSiteB.Name -VMSize $AzureVMSiteB.Size
-$VirtualMachine = Set-AzVMOperatingSystem -VM $VirtualMachine -Windows -ComputerName $AzureVMSiteB.ComputerName -Credential $Credential -ProvisionVMAgent -EnableAutoUpdate
-$VirtualMachine = Add-AzVMNetworkInterface -VM $VirtualMachine -Id $NIC.Id
-$VirtualMachine = Set-AzVMSourceImage -VM $VirtualMachine -PublisherName $AzureVMSiteB.PublisherName -Offer $AzureVMSiteB.Offer -Skus $AzureVMSiteB.Skus -Version $AzureVMSiteB.Version
+$VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue
+
+#Increment VM name and nic
+$i=1
+do {
+    $i++
+    $computername = ($AzureVMSiteB.ComputerName -replace '\d+$', $i)
+    $newVMname = ($AzureVMSiteB.Name -replace '\d+$', $i)
+    $newNIC = ($AzureVMSiteB.NICName -replace '\d+', $i)
+} until ($newVMname -notin $VMs.Name)
+
+#Update Names in config
+$AzureVMSiteB['ComputerName'] = $computername
+$AzureVMSiteB['Name'] = $newVMname
+$AzureVMSiteB['NICName'] = $newNIC
+
+Write-Host ("Virtual Machine name will be [{0}]" -f $AzureVMSiteB.Name)  -ForegroundColor Green
+
+#region Attach VM to second subnet which should be defaultsubnet
+$VMSubnet = $vNet.Subnets | Where Name -eq $AzureVMSiteB.SubnetName
+Write-Host ("Attaching VM's network interface [{0}] to subnet [{1}]..." -f $AzureVMSiteB.NICName,$AzureVMSiteB.SubnetName) -NoNewline
+Try{
+    $NIC = New-AzNetworkInterface -Name $AzureVMSiteB.NICName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
+                -Location $AzureAdvConfigSiteB.LocationName -SubnetId $VMSubnet.Id -Force
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
 #endregion
 
-#region Deploy VM
-New-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -VM $VirtualMachine -Verbose
+#region Build local admin credentials for VM
+If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})' -or $VMAdminPassword -match 'password')
+{
+    Write-Host ("You must specify a more complex password other than [{0}]" -f $VMAdminPassword) -ForegroundColor Red
+    $response1 = Read-host "Would you like to set a new password? [Y or N]"
+    If($response1 -eq 'Y'){
+        do {
+            $response2 = Read-host "Whats the new password?"
+        } until ($response2 -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
+        $AzureVMSiteB['LocalAdminPassword'] = $response2
+    }
+    Else{
+        Write-Host ("Unable to continue. Change config.ps1 variable [`$VMAdminPassword] value") -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+
+
+Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $AzureVMSiteB.LocalAdminUser,$AzureVMSiteB.Name) -NoNewline
+$LocalAdminSecurePassword = ConvertTo-SecureString $AzureVMSiteB.LocalAdminPassword -AsPlainText -Force
+$Credential = New-Object System.Management.Automation.PSCredential ($AzureVMSiteB.LocalAdminUser, $LocalAdminSecurePassword)
+Write-Host "Done" -ForegroundColor Green
 #endregion
+
+#Set VM Configuration
+$VMConfig = New-AzVMConfig -VMName $AzureVMSiteB.Name -VMSize $AzureVMSiteB.Size
+#Set VM operating system parameters
+
+$VMConfig = Set-AzVMOperatingSystem -VM $VMConfig -Windows -ComputerName $AzureVMSiteB.ComputerName -Credential $Credential `
+            -ProvisionVMAgent -EnableAutoUpdate
+#Set VM network interface
+$VMConfig = Add-AzVMNetworkInterface -VM $VMConfig -Id $NIC.Id
+
+#Set VM operating system parameters
+$VMConfig = Set-AzVMSourceImage -VM $VMConfig -PublisherName 'MicrosoftWindowsServer' -Offer 'WindowsServer' `
+            -Skus '2016-Datacenter' -Version latest
+
+#Set boot diagnostic storage account
+$VMConfig = Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -StorageAccountName $StorageAccount
+Try{
+    Write-Host ("Deploying virtual machine [{0}]..." -f $AzureVMSiteB.Name) -NoNewline
+    New-AzVM -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
+#endregion
+
 
 #region set autoshutdown (using custom function)
-If($AzureAdvConfigSiteB.EnableAutoshutdown){
-    #determin is notification is by email or webhookurl; set the appropiate param
+If($AzureVMSiteB.EnableAutoShutdown){
+    #determine is notification is by email or webhookurl; set the appropiate param
     $EmailRegex = '^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$'
     $URLRegex = '(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)'
-    If($AzureAdvConfigSiteB.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam = @{Email=$AzureAdvConfigSiteB.AutoShutdownNotificationType}}
-    If($AzureAdvConfigSiteB.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam =@{WebhookUrl=$AzureAdvConfigSiteB.AutoShutdownNotificationType}}
-    Set-AzVMAutoShutdown -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureAdvConfigSiteB.Name -Enable -Time $AzureAdvConfigSiteB.ShutdownTime -TimeZone $AzureAdvConfigSiteB.ShutdownTimeZone @ShutdownParam
+    $ShutdownParam = @{Time=$AzureVMSiteB.ShutdownTime;TimeZone=$AzureVMSiteB.ShutdownTimeZone}
+    If($AzureVMSiteB.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam += @{Email=$AzureVMSiteB.AutoShutdownNotificationType}}
+    If($AzureVMSiteB.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam +=@{WebhookUrl=$AzureVMSiteB.AutoShutdownNotificationType}}
+
+    Try{
+        Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $AzureVMSiteB.Name) -NoNewline
+        Set-AzVMAutoShutdown -Enable -Name $AzureVMSiteB.Name -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName @ShutdownParam | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    }
 }
 #endregion
 
-#region Reset VM password (Not working)
-<#
-#Re-reset password. Sometimes password set during deployment does not work
-$VM = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureVMSiteB.Name
-
-Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Status
-#must grab the VM Computer Type handler
-$typeParams = @{
- 'PublisherName' = 'Microsoft.Compute'
- 'Type' = 'VMAccessAgent'
- 'Location' = $AzureAdvConfigSiteB.LocationName
-}
-$typeHandlerVersion = (Get-AzVMExtensionImage @typeParams | Sort-Object Version -Descending | Select-Object -first 1).Version
-
-#remove the access exetension
-Remove-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Name 'enablevmaccess' -Force
-
-#build params
-$extensionParams = @{
-    Credential = $Credential
-    VMName = $AzureVMSiteB.Name
-    ResourceGroupName = $AzureAdvConfigSiteB.ResourceGroupName
-    Name = 'enablevmaccess'
-    Location = $AzureAdvConfigSiteB.LocationName
-    TypeHandlerVersion = $typeHandlerVersion
-}
-#add enablevmaccess back with new creds
-Set-AzVMAccessExtension @extensionParams
-#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureAdvConfigSiteB.LocationName
-Update-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VM $VM
-Restart-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureVMSiteB.Name
-
-#>
-#Reset the Remote Desktop Services configuration
-#Set-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Name "VMRDPAccess" -Location $AzureAdvConfigSiteB.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
-#endregion
-
-#get all VMs and their IP's
-$vms = Get-AzVM
-$nics = Get-AzNetworkInterface | where VirtualMachine -NE $null #skip Nics with no VM
-
-foreach($nic in $nics)
-{
-    $vm = $vms | where-object -Property Id -EQ $nic.VirtualMachine.id
-    $prv =  $nic.IpConfigurations | select-object -ExpandProperty PrivateIpAddress
-    Write-Host "$($vm.Name) : $prv" -ForegroundColor Yellow
-
-}
+Write-Host ("Done creating virtual machine [{0}]" -f $AzureVMSiteB.Name) -ForegroundColor Green
+Write-Host "=================================================" -ForegroundColor Green
 
 Stop-Transcript

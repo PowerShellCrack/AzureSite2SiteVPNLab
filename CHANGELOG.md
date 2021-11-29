@@ -4,8 +4,10 @@
 
 ## 1.3.4 - November 28, 2021
 
+- Fixed VM deployments; increments name if ran again, keeps same storage account, fixes autoshutdown, and prompts for valid password (if required)
+- Fixed stop on failures; missing break after each failure
 - Emphasized errors with read background and black text.
-- Added Sharedkey durign reset. Fixes VPN connection
+- Added Sharedkey during reset. Fixes VPN connection
 - Added dns and dhcp option in config; auto builds values for azure vm
 - Added vyatta cmd function; provides a in prompt cmd's remotely if needed
 - BETA: working support for latest vyos image

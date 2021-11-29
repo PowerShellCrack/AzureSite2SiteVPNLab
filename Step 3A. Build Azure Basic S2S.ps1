@@ -46,6 +46,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }Else{
     Write-Host ("Using Azure resource group [{0}]" -f $AzureSimpleConfig.ResourceGroupName) -ForegroundColor Green
@@ -76,6 +77,7 @@ If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupNam
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -96,6 +98,7 @@ If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vnet | Where Name -eq 'Ga
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 
@@ -114,6 +117,7 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -Re
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -133,6 +137,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpN
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -150,7 +155,8 @@ If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNet
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Redd
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -176,6 +182,7 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -R
     Catch{
         $stopwatch.Stop()
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -230,6 +237,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewa
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
@@ -243,6 +251,7 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -284,6 +293,7 @@ Elseif( $null -eq $currentGwConnection)
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{

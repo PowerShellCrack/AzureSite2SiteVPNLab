@@ -28,13 +28,29 @@ $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteAtoBConn.VNetGa
 $gateway2 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteAtoBConn.VNetGatewayName2 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2
 
 # Create the links (two are needed)
-New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection12 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg1 `
+Try{
+    Write-Host ("Building site-2-site gateway connection to second Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection12) -ForegroundColor Yellow -NoNewline
+    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection12 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg1 `
             -VirtualNetworkGateway1 $gateway1 -VirtualNetworkGateway2 $gateway2 -Location $AzureAdvConfigSiteAtoBConn.loc1 `
-            -ConnectionType Vnet2Vnet -SharedKey $sharedPSKKey -EnableBgp $UseBGP -RoutingWeight 10
+            -ConnectionType Vnet2Vnet -SharedKey $sharedPSKKey -EnableBgp $UseBGP -RoutingWeight 10 | Out-Null
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
 
-New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection21 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2 `
+Try{
+    Write-Host ("Building site-2-site gateway connection to first Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection21) -ForegroundColor Yellow -NoNewline
+    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection21 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2 `
             -VirtualNetworkGateway1 $gateway2 -VirtualNetworkGateway2 $gateway1 -Location $AzureAdvConfigSiteAtoBConn.loc2 `
             -ConnectionType Vnet2Vnet -SharedKey $sharedPSKKey -EnableBgp $UseBGP -RoutingWeight 10
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
 
 # check BGP ip address
 If($UseBGP){

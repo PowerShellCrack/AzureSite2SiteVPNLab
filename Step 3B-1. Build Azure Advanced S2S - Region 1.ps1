@@ -63,6 +63,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }Else{
     Write-Host ("Using Azure resource group [{0}]" -f $AzureAdvConfigSiteA.ResourceGroupName) -ForegroundColor Green
@@ -83,6 +84,7 @@ If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -Re
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
     Finally{
         Set-AzVirtualNetwork -VirtualNetwork $vNetA | Out-Null
@@ -108,6 +110,7 @@ If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
     Finally{
         Set-AzVirtualNetwork -VirtualNetwork $vNetB | Out-Null
@@ -132,6 +135,7 @@ If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameAB -
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -157,6 +161,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicI
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -175,6 +180,7 @@ Try{
 }
 Catch{
     Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
 }
 
 # get a public ip for the gateway
@@ -208,6 +214,7 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName 
     Catch{
         $stopwatch.Stop()
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -233,6 +240,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGate
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
@@ -246,6 +254,7 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
@@ -287,6 +296,7 @@ Elseif( $null -eq $currentGwConnection)
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
     }
 }
 Else{
