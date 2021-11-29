@@ -116,6 +116,7 @@ There are few options when building the Site2Site VPN lab:
 
 <span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, it will check all configurations and attempt to repair and issues. this can be useful when public IP has changed on home network</span>
 
+If all went well, the vyos router will connect each Azure site.
 ### Azure VM
 
 The last thing to do is setup a VM in your Azure lab without Public IP and connect to it from you hyper-V vm. This is a good test to see if your VPN is connected
@@ -134,10 +135,8 @@ To setup a VM, run the script corresponding to the type of Azure VPN you set up 
 
 <span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, The script with create another VM incrementing the name automatically or you can specify an name like so:</span>
 ```powershell
-	& .\Step 4A. Build Azure VM.ps1 -VMname 'contoso-dc1'
+	& '.\Step 4A. Build Azure VM.ps1' -VMName 'contoso-dc1'
 ```
-
-If all went well, the vyos router will connect each Azure site.
 
 **INFO**: The _vyos_setup_ folder are templates and samples of known working configurations. Can be used to compare configurations in your VyOS router
 

@@ -241,7 +241,7 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
     break
 }
 
-
+Write-Host "Processed variables. Loading configuration data..." -ForegroundColor Green
 #============================================
 # AZURE CONNECTION
 #============================================
