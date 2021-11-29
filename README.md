@@ -3,45 +3,57 @@
 ## Prereqs
 
 - Azure subscription (VSE or Trial will work)
-- Windows OS thats supports Hyper-V
-- Edge router with S2S IPSEC VPN capabilities OR vyOS Router
-  - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso)
-- Access to home router and port forwarding
+- Windows OS that will support Hyper-V (UEFI or TPM not needed)
+- Edge router with S2S IPSEC VPN capabilities __OR__ vyOS Router
+  - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso). The script will auto download it for you as well
 - Partial knowledge with Powershell
-- SSH utility such as putty or git cmd. You can get it [**here**](https://git-scm.com/downloads)
+- SSH utility with SCP and SSH-Keygen. These are installed with Git for Windows. You can get it [**here**](https://git-scm.com/downloads)
 
 ## Scripts
 
 - **configs.ps1**. <-- This script is used to answer script values; linked to all scripts
-  - Rename _configs.example.ps1_ to **configs.ps1**.
-  - Be sure to look through the hashtables and change anything you feel is necessary.
-  - All the script use this as an answer file for each of the setup. The answers are loaded in hashtable format
+  - Rename _configs.example.ps1_ to **configs.ps1**
+  - _Advanced:_ Be sure to look through the hashtables and change anything you feel is necessary.
+  - All scripts use this as an answer file for each setup. The answers are loaded in hashtable format and all of the required values are generated dynamically or will be prompted during execution
   - There are few things you should change on the top section:
 
 ```powershell
-$LabPrefix = '<lab name>' #identifier for names in lab
+$LabPrefix = 'contoso' #identifier for names in lab
 
-$domain = '<lab fqdn>' #just a name for now (no DC install....yet)
+$domain = 'lab.contoso.com' #just a name for now (no DC install....yet)
 
-$UseBGP = $false # not required for VPN, but can help. Costs more.
-#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
-
-$AzEmail = '' #used only in autoshutdown (for now)
-
+$Email = '' #used only in autoshutdown (for now)
 
 #this is used to configure default username and password on Azure VM's
-$VMAdminUser = '<admin>'
+$VMAdminUser = 'xAdmin'
 $VMAdminPassword = '<password>'
 
-$OnPremSubnetCIDR = '10.100.0.0/16'
+#NOTE: Make sure ALL subnets do not overlap!
+$OnPremSubnetCIDR = '10.120.0.0/16' #Always use /16
+$OnPremSubnetCount = 2
 
-$AzureHubSubnetCIDR = '10.10.0.0/16'
-$AzureSpokeSubnetCIDR = '10.20.0.0/16'
+$RegionSiteAId = 'SiteA'
+$AzureSiteAHubCIDR = '10.23.0.0/16' #Always use /16
+$AzureSiteASpokeCIDR = '10.22.0.0/16' #Always use /16
 
-$ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
+$RegionSiteBId = 'SiteB'
+$AzureSiteBHubCIDR = '10.33.0.0/16' #Always use /16
+$AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
 
-#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
+$DHCPLocation = '<ip, server, or router>'   #defaults to dhcp server not on router; assumes dhcp is on a server
+                                            #if <router> is specified, dhcp server will be enabled but a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
+
+$DNSServer = '<ip, ip addresses (comma delimitated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available ip for VM
+                                                                # if <router> is specified; google ip 8.8.8.8 will be used since no dns server exist on router
+
+$HyperVVMLocation = '<default>' #Leave as <default> for auto detect
+$HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
+
+$VyosIsoPath = '<default>' #Add path (eg. 'E:\ISOs\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest vyos ISO (this is still in BETA)
+                  #If path left blank or default, it will attempt to download the supported versions (1.1.8)
+
 $UseBGP = $false # not required for VPN, but can help. Costs more.
+#https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
 
 #used in step 5
 $AzureVnetToVnetPeering = @{
@@ -50,17 +62,28 @@ $AzureVnetToVnetPeering = @{
     SiteBSubscriptionID = '<SubscriptionBID>'
     SiteBTenantID = '<TenantBID>'
 }
+
+#Uses Git, SSH and SCP to build vyos router
+# 99% automated; but 90% successful
+$RouterAutomationMode = $True
 ```
 
-- **library.ps1** <-- Custom functions used to automate
+- **library.ps1** <-- Custom functions used for Azure automation
+- **network.ps1** <-- Custom functions used to generating network subnets
+- **vyos.ps1** <-- Custom functions used for vyos automation
 
-**NOTE**: All logs are written using a transcript to the logs folder; just in case you need to troubleshoot
+**NOTE**: All logs are written using a transcript to the logs folder including vyos scripts
 
 ## Setup Hyper-V Lab
 
 **NOTE:** be sure to run these scripts with elevated rights.
 
 1. run script: **Step 1. Setup HyperV for Lab.ps1**
+
+This script does a few things:
+- Installs hyper-v (if needed)
+- Sets up networking (external and internal interfaces)
+- Check to see if device is on wifi and attaches that to external; otherwise it used physical
 
 ### Setup VYOS Router (in Hyper-V)
 

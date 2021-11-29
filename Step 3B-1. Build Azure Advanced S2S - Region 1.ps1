@@ -11,7 +11,7 @@ If($PSScriptRoot.ToString().length -eq 0)
 }
 Else{
     Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoAzureCheck
+    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
     Write-Host "Done" -ForegroundColor Green
 }
 #endregion

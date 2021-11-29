@@ -5,6 +5,7 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell
 #https://docs.microsoft.com/en-us/powershell/module/az.compute/new-azvm?view=azps-2.8.0
 
+
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
@@ -13,8 +14,9 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow
-    . "$PSScriptRoot\configs.ps1"
+    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host "Done" -ForegroundColor Green
 }
 #endregion
 

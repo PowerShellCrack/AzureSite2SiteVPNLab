@@ -1,5 +1,6 @@
 ﻿Param(
-    [switch]$NoAzureCheck
+    [switch]$NoAzureCheck,
+    [switch]$NoVyosISOCheck
 )
 #============================================
 # General Configurations - EDIT THIS
@@ -303,68 +304,69 @@ If($HyperVHDxLocation -match 'default')
 #============================================
 # VYOS ISO CHECK
 #============================================
-If($VyosIsoPath -eq '<latest>'){
-    $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
-    $vyosfilename = (Split-Path $vyossource -Leaf)
-    #Assume if set to latest, force download (no prompt)
-    $VyOSResponse = 'Y'
-    $destination = "$Env:temp\$vyosfilename"
-}
-ElseIf([string]::IsNullOrEmpty($VyosIsoPath) -or ($VyosIsoPath -match 'default') ){
-    $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
-    $vyosfilename = (Split-Path $vyossource -Leaf)
-    $VyOSResponse = 'Y'
-    $destination = "$Env:temp\$vyosfilename"
-}
-Else{
-    $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
-    $vyosfilename = (Split-Path $vyossource -Leaf)
-
-    # Destination to save the file
-    If(Test-Path $VyosIsoPath -ErrorAction SilentlyContinue){
-        $destination = $VyosIsoPath
-    }
-    ElseIf(Test-Path "$Env:USERPROFILE\downloads" -ErrorAction SilentlyContinue){
-        $destination = "$Env:USERPROFILE\downloads\$vyosfilename"
-    }
-    Else{
+If(!$NoVyosISOCheck){
+    If($VyosIsoPath -eq '<latest>'){
+        $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
+        $vyosfilename = (Split-Path $vyossource -Leaf)
+        #Assume if set to latest, force download (no prompt)
+        $VyOSResponse = 'Y'
         $destination = "$Env:temp\$vyosfilename"
     }
-}
-
-If( !(Test-Path $destination) )
-{
-    If($Null -eq $VyOSResponse){
+    ElseIf([string]::IsNullOrEmpty($VyosIsoPath) -or ($VyosIsoPath -match 'default') ){
         $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
-        Write-host ("No iso found in [{0}]" -f $destination) -ForegroundColor Red
-        $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
-    }
-
-    If($VyOSResponse -eq 'Y')
-    {
         $vyosfilename = (Split-Path $vyossource -Leaf)
-        Write-host ("Attempting to download [{0}] from [{1}].\nThis can take awhile..." -f $vyosfilename,$vyossource) -ForegroundColor Yellow -NoNewline
-        #Download the file
-        Try{
-            Invoke-WebRequest -Uri $vyossource -OutFile $destination -ErrorAction Stop
-            Write-Host "Done" -ForegroundColor Green
-        }
-        Catch{
-            Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-            break
-        }
-        Finally{
-            $VyosIsoPath = $destination
-        }
+        $VyOSResponse = 'Y'
+        $destination = "$Env:temp\$vyosfilename"
     }
     Else{
-        Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
-        break
-    }
-}Else{
-    $VyosIsoPath = $destination
-}
+        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        $vyosfilename = (Split-Path $vyossource -Leaf)
 
+        # Destination to save the file
+        If(Test-Path $VyosIsoPath -ErrorAction SilentlyContinue){
+            $destination = $VyosIsoPath
+        }
+        ElseIf(Test-Path "$Env:USERPROFILE\downloads" -ErrorAction SilentlyContinue){
+            $destination = "$Env:USERPROFILE\downloads\$vyosfilename"
+        }
+        Else{
+            $destination = "$Env:temp\$vyosfilename"
+        }
+    }
+
+    If( !(Test-Path $destination) )
+    {
+        If($Null -eq $VyOSResponse){
+            $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+            Write-host ("No iso found in [{0}]" -f $destination) -ForegroundColor Red
+            $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
+        }
+
+        If($VyOSResponse -eq 'Y')
+        {
+            $vyosfilename = (Split-Path $vyossource -Leaf)
+            Write-host ("Attempting to download [{0}] from [{1}].\nThis can take awhile..." -f $vyosfilename,$vyossource) -ForegroundColor Yellow -NoNewline
+            #Download the file
+            Try{
+                Invoke-WebRequest -Uri $vyossource -OutFile $destination -ErrorAction Stop
+                Write-Host "Done" -ForegroundColor Green
+            }
+            Catch{
+                Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                break
+            }
+            Finally{
+                $VyosIsoPath = $destination
+            }
+        }
+        Else{
+            Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
+            break
+        }
+    }Else{
+        $VyosIsoPath = $destination
+    }
+}
 #============================================
 # CONFIGURATIONS
 #============================================
