@@ -47,10 +47,10 @@ Else{
     #Increment VM name and nic
     $i=1
     do {
-        $i++
         $computername = ($AzureVMSiteB.ComputerName -replace '\d+$', $i)
         $newVMname = ($AzureVMSiteB.Name -replace '\d+$', $i)
         $newNIC = ($AzureVMSiteB.NICName -replace '\d+', $i)
+        $i++
     } until ($newVMname -notin $VMs.Name)
 }
 #Update Names in config
