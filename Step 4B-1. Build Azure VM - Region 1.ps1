@@ -1,3 +1,7 @@
+Param(
+    [ValidatePattern("^[-_]|[^a-zA-Z0-9-_]")]
+    [string]$VMName
+)
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
@@ -20,10 +24,44 @@ Else{
 #endregion
 
 
+
 #start transcript
 $LogfileName = "$RegionName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
+
+#region Build VM configurations
+$VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue
+If($VMName)
+{
+    If($VMName -in $VMs.Name){
+        Write-Host ("Name already exists. You must specify a different vm name other than [{0}]" -f $VMName) -ForegroundColor Red
+        do {
+            $VMresponse = Read-host "Whats the new VM name?"
+        } until ($VMresponse -match "^[-_]|[^a-zA-Z0-9-_]")
+    }
+    $computername = $VMName | Set-TruncateString -length 11
+    $newVMname =  $VMName.ToLower()
+    $newNIC = $VMName.ToLower() + '-nic'
+}
+Else{
+    #Increment VM name and nic
+    $i=1
+    do {
+        $i++
+        $computername = ($AzureVMSiteA.ComputerName -replace '\d+$', $i)
+        $newVMname = ($AzureVMSiteA.Name -replace '\d+$', $i)
+        $newNIC = ($AzureVMSiteA.NICName -replace '\d+', $i)
+    } until ($newVMname -notin $VMs.Name)
+}
+
+#Update Names in config
+$AzureVMSiteA['ComputerName'] = $computername
+$AzureVMSiteA['Name'] = $newVMname
+$AzureVMSiteA['NICName'] = $newNIC
+
+Write-Host ("Virtual Machine name will be [{0}]" -f $AzureVMSiteB.Name)  -ForegroundColor Green
+#endregion
 
 #region 1. Create a resource group:
 If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
@@ -93,25 +131,6 @@ Else{
 }
 #endregion
 
-
-#region Build VM configurations
-$VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue
-
-#Increment VM name and nic
-$i=1
-do {
-    $i++
-    $computername = ($AzureVMSiteA.ComputerName -replace '\d+$', $i)
-    $newVMname = ($AzureVMSiteA.Name -replace '\d+$', $i)
-    $newNIC = ($AzureVMSiteA.NICName -replace '\d+', $i)
-} until ($newVMname -notin $VMs.Name)
-
-#Update Names in config
-$AzureVMSiteA['ComputerName'] = $computername
-$AzureVMSiteA['Name'] = $newVMname
-$AzureVMSiteA['NICName'] = $newNIC
-
-Write-Host ("Virtual Machine name will be [{0}]" -f $AzureVMSiteB.Name)  -ForegroundColor Green
 
 #region Attach VM to second subnet which should be defaultsubnet
 $VMSubnet = $vNet.Subnets | Where Name -eq $AzureVMSiteA.SubnetName

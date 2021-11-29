@@ -88,19 +88,23 @@ This script does a few things:
 ### Setup VYOS Router (in Hyper-V)
 
 1. run script: **Step 2. Setup Vyos Router in Lab.ps1**
-2. The first few steps for the vyos will be manual until SSH is established
-   - You will be prompted to make configurations to the router. Also once SSH is established the script will generate RSA key to auto logon.
-   This is a temporary process because vyos does not save authorized_keys.  if login is successful, it will auto configure the vyos router for you otherwise you will be presented with a copy/paste configurations.
-   - You can use the script to load the vYOS router as long as you change the location to your ISO. eg:
 
+This script does a few things:
+- Downloads the vyos ISO if path not found (downloads to user downloads folder or temp folder)
+- Setups the vyos basic configuration (manual steps required)
+- Established SSH to vyos and attempts auto confougrations for lan network
+  - You will be prompted to make configurations to the router. Also once SSH is established the script will generate RSA key to auto logon.
+   This is a temporary process because vyos does not save authorized_keys. if login is successful, it will auto configure the vyos router for you otherwise you will be presented with a copy/paste configurations.
+
+Change the value to something like this:
 ```powershell
-	ISOLocation = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
+	$VyosIsoPath = 'D:\ISOs\VyOS-1.1.8-amd64.iso'
 ```
 
 ## Azure VPN Lab
-There are few options when building the Azure lab. Your Options are:
+There are few options when building the Site2Site VPN lab:
 
-  _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub or spoke configurations.
+  _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub and spoke configurations.
 
   _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Run script:
 
@@ -109,6 +113,8 @@ There are few options when building the Azure lab. Your Options are:
 1. **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
 2. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
 3. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
+
+<span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, it will check all configurations and attempt to repair and issues. this can be useful when public IP has changed on home network</span>
 
 ### Azure VM
 
@@ -125,6 +131,11 @@ To setup a VM, run the script corresponding to the type of Azure VPN you set up 
 
 1. **Step 4B-1. Build Azure VM - Region 1.ps1**
 2. **Step 4B-2. Build Azure VM - Region 2.ps1**
+
+<span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, The script with create another VM incrementing the name automatically or you can specify an name like so:</span>
+```powershell
+	& .\Step 4A. Build Azure VM.ps1 -VMname 'contoso-dc1'
+```
 
 If all went well, the vyos router will connect each Azure site.
 
