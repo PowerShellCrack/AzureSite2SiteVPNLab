@@ -1,5 +1,5 @@
 Param(
-    [ValidatePattern("^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$")]
+    [ValidatePattern("^(?![0-9]{1,64}$)[a-zA-Z0-9-]{1,64}$")]
     [string]$VMName
 )
 $ErrorActionPreference = "Stop"
@@ -37,9 +37,11 @@ If($VMName)
         Write-Host ("Name already exists. You must specify a different vm name other than [{0}]" -f $VMName) -ForegroundColor Red
         do {
             $VMresponse = Read-host "Whats the new VM name?"
-        } until ($VMresponse -match "^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$")
+        } until ($VMresponse -match "^(?![0-9]{1,64}$)[a-zA-Z0-9-]{1,64}$" -and $VMresponse -ne $VMName)
+        $VMName = $VMresponse
     }
-    $computername = $VMName | Set-TruncateString -length 11
+    #Azure vm can be 64 characters long but the computername cannot
+    $computername = $VMName | Set-TruncateString -length 15
     $newVMname =  $VMName.ToLower()
     $newNIC = $VMName.ToLower() + '-nic'
 }
