@@ -114,10 +114,10 @@ If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -Resource
     Write-Host ("Creating Azure network security group [{0}]..." -f $AzureSimpleVM.NSGName) -NoNewline
     Try{
         $NSG = New-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
-        $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
+        $NSG | Add-AzNetworkSecurityRuleConfig -Name "Allow_Port_3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
                         -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-        Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $vNet -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix `
+        Set-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix `
                     -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue | Out-Null
         $vNet | Set-AzVirtualNetwork -WarningAction SilentlyContinue | Out-Null
         Write-Host "Done" -ForegroundColor Green

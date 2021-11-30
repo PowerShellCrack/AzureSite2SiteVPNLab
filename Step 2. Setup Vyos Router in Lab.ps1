@@ -34,19 +34,26 @@ Else{
 
 
 #start transcript
-$LogfileName = "$RegionAName-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$LabPrefix-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
-
-$VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-#region Create VyOS VM
 If(-Not(Test-Path $VyOSConfig.ISOLocation)){Write-Host ("Unable to find VyOS ISO: [{0}]. Please update config and rerun setup" -f $VyOSConfig.ISOLocation) -ForegroundColor Red;Break}
 
+#check drive space availability
+$DriveLetter = (Get-Item $HyperVConfig.VirtualHardDiskLocation).PSDrive.Name
+$disk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($DriveLetter):'" | Select-Object *
+If($disk.FreeSpace/1GB -le 2){
+    Write-Host ("Unable to create VHD: [{0}]. Not enough drive space [{1}GB]" -f $VHDxFilePath,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Red
+    Break
+}
+
+#region Create VyOS VM
+$VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 If($null -eq $VM){
     Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -NoNewline
     $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
     Try{
-        If(Get-VHD -Path $VHDxFilePath ){
+        If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue ){
             Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
         }
         New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
@@ -197,7 +204,6 @@ Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 start-sleep 10
 
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-#$VyOSNetworks = Get-VMSwitch -Name "$($VyOSConfig.NetPrefix)*" | Sort Name
 $VyOSNetworks = $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name
 
 #TEST $Network = $VyOSNetworks[0]
@@ -249,7 +255,7 @@ set service dns forwarding cache-size '0'
 $i=1
 #TEST $SubnetCIDR = ($VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)[0]
 foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
-    $Description = ("{0} for {1}" -f $vYosConfig.NetPrefix,$VyOSConfig.LocalSubnetPrefix[$SubnetCIDR.Name])
+    $Description = ("LAN Subnet for {0}" -f $VyOSConfig.LocalSubnetPrefix[$SubnetCIDR.Name])
     $IPInfo = Get-NetworkDetails -CidrAddress $SubnetCIDR.Name
     $GatewayInfo = Get-TypicalRouterRange -StartIP $IPInfo.StartingIP -EndIP $IPInfo.EndingIP -Gateway $IPInfo.SubnetMask -Position Last
     $VyOSLanCmd += @"

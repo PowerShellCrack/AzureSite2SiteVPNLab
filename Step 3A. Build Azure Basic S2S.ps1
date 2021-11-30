@@ -110,8 +110,10 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -Re
 {
     Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
     Try{
+        #New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+        #            -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
+                    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -189,49 +191,13 @@ Else{
 }
 #endregion
 
-#region 9. Create the VPN connection
-<#If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
-{
-    Write-host ("Create the VPN connection for [{0}]..." -f $AzureSimpleConfig.ConnectionName) -NoNewline
-    Try{
-        #create the Site-to-Site VPN connection between your virtual network gateway and your VPN device.
-        $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-
-        #Create the connection
-        New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-            -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
-    }
-}
-ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
-{
-    Try{
-        Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
-        #Update Local network gateway's connector IP address (onpremise IP)
-        New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix -Force | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Red
-    }
-}
-Else{
-    Write-Host ("Using Azure local network gateway [{0}]" -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor Green
-}
-
-#>
-
+#region 9. Create the Virtual Network Gateway
 If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
     Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
+                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -245,7 +211,7 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
         Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix -Force | Out-Null
+                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{

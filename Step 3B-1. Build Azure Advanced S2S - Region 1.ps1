@@ -234,7 +234,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGate
     Write-host ("Building the local network gateway [{0}]..." -f $AzureAdvConfigSiteA.LocalGatewayName) -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-                -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix @LNGBGPParams | Out-Null
+                -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys @LNGBGPParams | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -290,7 +290,7 @@ Elseif( $null -eq $currentGwConnection)
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
             -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -enablebgp $UseBGP | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -EnableBgp $UseBGP | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{

@@ -13,6 +13,11 @@ Else{
 }
 #endregion
 
+#start transcript
+$LogfileName = "$LabPrefix-HyperVSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+
+
 #install hyper-V feature
 Write-Host ("Enabling Hyper-V role...") -NoNewline
 If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -ne 'Enabled'){
@@ -86,3 +91,4 @@ Foreach($Subnet in $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Na
 
 Write-Host ("Done configuring Hyper-V") -ForegroundColor Green
 Write-Host "--------------------------------------------------" -ForegroundColor Green
+Stop-Transcript

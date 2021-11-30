@@ -24,7 +24,8 @@ Else{
 
 
 #start transcript
-$LogfileName = "$RegionName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+
+$LogfileName = "$RegionBName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
 #region Build VM configurations
@@ -111,10 +112,10 @@ If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceG
     Write-Host ("Creating Azure network security group [{0}]..." -f $AzureVMSiteB.NSGName) -NoNewline
     Try{
         $NSG = New-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
-        $NSG | Add-AzNetworkSecurityRuleConfig -Name "RDP" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
+        $NSG | Add-AzNetworkSecurityRuleConfig -Name "Allow_Port_3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
                         -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-        Set-AzVirtualNetworkSubnetConfig -Name 'DefaultSubnet' -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSubnetPrefix `
+        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSubnetPrefix `
                     -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue | Out-Null
         $vNet | Set-AzVirtualNetwork -WarningAction SilentlyContinue | Out-Null
         Write-Host "Done" -ForegroundColor Green

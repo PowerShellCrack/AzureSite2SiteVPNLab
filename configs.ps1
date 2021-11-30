@@ -40,6 +40,8 @@ $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
 $VyosIsoPath = '<default>' #Add path (eg. 'E:\ISOs\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest vyos ISO (this is still in BETA)
                   #If path left blank or default, it will attempt to download the supported versions (1.1.8)
 
+$HyperVVmIsoPath = 'E:\ISOs\en-us_windows_10_business_editions_version_20h2_updated_october_2021_x64_dvd_e057173c.iso'
+
 $UseBGP = $false # not required for VPN, but can help. Costs more.
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-bgp-overview
 
@@ -389,6 +391,20 @@ $HyperVConfig = @{
 
     AllowedvLanIdRange = '1-100'
 }
+
+
+
+
+$HyperVSimpleVM = @{
+    LocalAdminUser = $VMAdminUser
+    LocalAdminPassword = $VMAdminPassword
+    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm2'
+    Name = $RegionName + '-vm2'
+    ISOLocation = $HyperVVmIsoPath
+    Unattended = $true
+    HDDSize=60GB #in gigabytes
+}
+#endregion
 #endregion
 
 
@@ -418,12 +434,10 @@ Else{
 }
 
 
-
 $VyOSConfig = @{
     HostName = ('VyOS').ToLower()
     VMName = $LabPrefix.ToUpper() + '-Router'
     ISOLocation = $VyosIsoPath
-    NetPrefix = 'LAN'
     TimeZone = 'US/Eastern'
 
     ExternalInterface = 'Default Switch' #CHANGE: Match one of the external network names in hyper config
@@ -486,7 +500,7 @@ Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
     $SubnetNoCider = $Subnet -replace '/\d+$',''
     if(-Not($DHCPPoolTable.ContainsKey($Subnet)) ){
-        $DHCPPoolTable[$SubnetNoCider] = ($SubnetNoCider -replace '.\d+$','.255')
+        $DHCPPoolTable[$SubnetNoCider] = ($SubnetNoCider -replace '.\d+$','.254')
     }
 }
 
@@ -495,8 +509,8 @@ $i = 1
 $VirtualSwitchTable = $HyperVConfig['VirtualSwitchNetworks']
 Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
 {
-    $SwitchName = ($vYosConfig.NetPrefix +' ' + $i + ' - ' + $Subnet.Name)
-    $Description = ("{2} for {1}: {0}" -f $Subnet.Name,$LabPrefix,$vYosConfig.NetPrefix)
+    $SwitchName = ('LAN ' + $i + ' - ' + $Subnet.Name)
+    $Description = ("LAN subnet for {1}: {0}" -f $Subnet.Name,$LabPrefix)
     $VirtualSwitchTable[$SwitchName] = $Description
     $i++
 }
@@ -521,7 +535,7 @@ $AzureSimpleConfig = @{
 
     ResourceGroupName = $RegionName + '-rg'
     VnetName = $RegionName + '-vNet'
-    VnetGatewayName = $RegionName + '-vngw'
+    VnetGatewayName = $RegionName + '-vng'
     LocalGatewayName = $RegionName + '-lng'
     PublicIPName = $RegionName + '-pip'
     ConnectionName = ('connection-to-' + $RegionName)
@@ -569,7 +583,10 @@ $AzureSimpleVM = @{
     ShutdownTimeZone = 'Eastern Standard Time'
     ShutdownTime = '21:00'
 }
-#endregion
+
+
+
+
 
 #============================================
 ## ADVANCED CONFIGURATION
@@ -610,7 +627,7 @@ $AzureAdvConfigSiteA = @{
     VnetPeerNameAB = ($RegionAName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
     VnetPeerNameBA = ($RegionAName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
 
-    VnetGatewayName = ($RegionAName).Replace(" ",'').ToLower() + '-vngw'
+    VnetGatewayName = ($RegionAName).Replace(" ",'').ToLower() + '-vng'
     LocalGatewayName = $RegionAName + '-lng'
     ConnectionName = ('connection-to-' + $RegionAName).Replace(" ",'')
 
@@ -689,7 +706,7 @@ $AzureAdvConfigSiteB = @{
     VnetPeerNameAB = ($RegionBName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
     VnetPeerNameBA = ($RegionBName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
 
-    VnetGatewayName = ($RegionBName).Replace(" ",'').ToLower() + '-vngw'
+    VnetGatewayName = ($RegionBName).Replace(" ",'').ToLower() + '-vng'
     LocalGatewayName = $RegionBName + '-lng'
     ConnectionName = ('connection-to-' + $RegionBName).Replace(" ",'')
 

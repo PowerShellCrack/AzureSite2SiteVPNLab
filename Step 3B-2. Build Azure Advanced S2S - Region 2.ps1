@@ -16,7 +16,7 @@ Else{
 #endregion
 
 #region start transcript
-$LogfileName = "$RegionAName-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$RegionBName-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 #endregion
 
@@ -234,7 +234,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigSiteB.LocalGate
     Write-host ("Building the local network gateway [{0}]..." -f $AzureAdvConfigSiteB.LocalGatewayName) -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteB.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
-                -Location $AzureAdvConfigSiteB.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix @LNGBGPParams | Out-Null
+                -Location $AzureAdvConfigSiteB.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys @LNGBGPParams | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -289,7 +289,7 @@ Elseif( $null -eq $currentGwConnection)
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteB.ConnectionName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
             -Location $AzureAdvConfigSiteB.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -enablebgp $UseBGP | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -EnableBgp $UseBGP | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
