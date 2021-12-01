@@ -8,23 +8,6 @@ Param(
                 $fakeBoundParameters )
 
 
-        $vNets = Get-AzVirtualNetwork | Select -ExpandProperty Name
-
-        $vNets | Where-Object {
-            $_ -like "$wordToComplete*"
-        }
-
-    } )]
-    [Alias("vNet")]
-    [string]$VirtualNetwork,
-    [ArgumentCompleter( {
-        param ( $commandName,
-                $parameterName,
-                $wordToComplete,
-                $commandAst,
-                $fakeBoundParameters )
-
-
         $RGs = Get-AzResourceGroup | Select -ExpandProperty ResourceGroupName
 
         $RGs | Where-Object {
@@ -33,7 +16,44 @@ Param(
 
     } )]
     [Alias("rg")]
-    [string]$ResourceGroup
+    [string]$ResourceGroup,
+
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $vNets = Get-AzVirtualNetwork -ResourceGroupName $ResourceGroup | Select -ExpandProperty Name
+
+        $vNets | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("vNet")]
+    [string]$VirtualNetwork,
+
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Nics = (Get-AzNetworkInterface -ResourceGroupName $ResourceGroup).IpConfigurations.PrivateIpAddress
+
+        $Nics | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("DNS")]
+    [string]$DNSIP,
+    [switch]$Force
 )
 <#
 #TEST VARIABLES
@@ -62,6 +82,9 @@ Else{
 
 #if prefix specified, make it lower case else use config's prefix
 If($Prefix){$Prefix = $Prefix.ToLower()}Else{$Prefix = $LabPrefix.ToLower()}
+
+
+$VyOSConfig['InternalDNSIP'] = $DNSIP
 
 $AzureExistingConfig = @{
 
@@ -117,22 +140,24 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
     If($vNets.count -gt 1){
        If($vNets.Name -eq $VirtualNetwork){
             $vNet = $vNets | Where Name -eq $VirtualNetwork
+            $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue
+
             $vNetName = $vNet.Name
             $vNetLocation = $vNet.Location
             $vNetCidr = $vNet.AddressSpace.AddressPrefixes
-            $vNetSubnets = $vNet.Subnets.AddressPrefix
-            $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -eq 'GatewaySubnet'
+            $vNetSubnets = $SubnetConfigs | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
+            $GatewaySubnet = $SubnetConfigs | Where Name -eq 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
             Write-Host ("Found Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
        }
 
        If($vNets.Name -match 'Spoke'){
             $vNetSpokeExist = $true
             $vNetSpoke = $vNets | Where Name -match 'Spoke'
+            $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue
+
             $vNetSpokeName = $vNetSpoke.Name
-            $vNetSpokeLocation = $vNetSpoke.Location
             $vNetSpokeCidr = $vNetSpoke.AddressSpace.AddressPrefixes
             $vNetSpokeSubnets = $vNetSpoke.Subnets.AddressPrefix
-
             Write-Host ("Found Spoke Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetSpokeName,($vNetSpokeCidr -join ','),($vNetSpokeSubnets -join ','))
        }
 
@@ -141,19 +166,28 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
             $vNet = $vNets | Where Name -match 'Hub'
             $vNetName = $vNetHub.Name
             $vNetLocation = $vNetHub.Location
-            $vNetCidr = $vNetHub.AddressSpace.AddressPrefixes
-            $vNetSubnets = $vNetHub.Subnets.AddressPrefix
+
+            If($vNetSpokeExist){
+                $vNetCidr = $vNetSpoke.AddressSpace.AddressPrefixes
+                $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNetSpoke -ErrorAction SilentlyContinue | Select -ExpandProperty AddressPrefix
+            }
+            Else{
+                $vNetCidr = $vNetHub.AddressSpace.AddressPrefixes
+                $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
+            }
             $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNetHub -ErrorAction SilentlyContinue  | Where Name -eq 'GatewaySubnet'
             Write-Host ("Found Hub Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
        }
     }
     Else{
         $vNet = $vNets
+        $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue
+
         $vNetName = $vNet.Name
         $vNetLocation = $vNet.Location
         $vNetCidr = $vNet.AddressSpace.AddressPrefixes
-        $vNetSubnets = $vNet.Subnets.AddressPrefix
-        $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -eq 'GatewaySubnet'
+        $vNetSubnets = $SubnetConfigs | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
+        $GatewaySubnet = $SubnetConfigs | Where Name -eq 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
         Write-Host ("Found single Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
     }
 
@@ -372,8 +406,12 @@ Else{
 #region 9. Create the VPN connection
 $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
             -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
-
-If( ($currentGwConnection).ConnectionStatus -eq "Connected")
+If($Force){
+    Write-Host ("Force is impletemented. Rebuilding router's VPN settings...") -ForegroundColor Cyan
+    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+    $VyOSConfig['ResetVPNConfigs'] = $true
+}
+ElseIf( ($currentGwConnection).ConnectionStatus -eq "Connected")
 {
     Write-Host ("VPN Gateway is connected to ip [{0}]. No further action needed!" -f $azpip.IpAddress) -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
@@ -443,12 +481,85 @@ If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
 #delete current configurations
 delete vpn ipsec
-delete protocols bgp
+delete protocols
 `n
 "@
 }
 
+If($DNSIP){
+    $VyOSFinal += @"
+`n
+delete service dns forwarding name-server
+"@
+
+    $i=1
+    #TEST $SubnetCIDR = ($VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)[0]
+    foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+        $VyOSFinal += @"
+`n
+#Interface $i Configuration
+set service dns forwarding listen-on 'eth$i'
+"@
+
+        If($VyOSConfig.EnableDHCP){
+            $VyOSFinal += @"
+`n
+
+delete service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server
+"@
+
+            foreach ($DNS in $DNSIP){
+                If(Test-IPAddress $DNS){
+                    $VyOSFinal += @"
+`n
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server $DNS
+"@
+                }
+            }#end dns loop
+        }
+        $i++
+
 $VyOSFinal += @"
+`n
+set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
+"@
+    } #end subnet loop
+
+    switch($VyOSConfig.UseDNSOption){
+        'External' {
+            $VyOSFinal += @"
+`n
+#forward home network dhcp`n
+set service dns forwarding dhcp eth0
+"@
+        }#end external switch option
+
+        'Internal' {
+            $VyOSFinal += @"
+`n
+#Set internal dns
+"@
+            foreach ($IP in $VyOSConfig.InternalDNSIP){
+                $VyOSFinal += @"
+set service dns forwarding name-server '$IP'
+"@
+            }
+        }#end internal switch option
+
+        'Internet' {
+            $VyOSFinal += @"
+
+#Set internet dns
+`n
+set service dns forwarding name-server '8.8.8.8'
+set service dns forwarding name-server '$NextHop'
+"@
+        } #end internet switch option
+    } #end switch
+}
+
+$VyOSFinal += @"
+`n
 # Set up the IPsec preamble for link Azures gateway
 set vpn ipsec esp-group azure compression 'disable'
 set vpn ipsec esp-group azure lifetime '3600'
@@ -480,8 +591,14 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($A
 
 #Default route and blackhole route for BGP and set private ASN number
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
-
 "@
+
+If($VyOSConfig.ResetVPNConfigs){
+    $VyOSFinal += @"
+`n
+run reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
+"@
+}
 
 $VyOSFinal += @"
 
@@ -493,6 +610,8 @@ save
 
 #region 11: Build reset vpn config
 $VyOSReset = @"
+`n
+run reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
 restart vpn
 run show ipsec vpn sa
 `n
@@ -501,7 +620,8 @@ run show ipsec vpn sa
 
 #Always output script
 $ScriptName = $LogfileName.replace('.log','.script')
-$VyOSFinal -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
+Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
+$VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
 If($RouterAutomationMode)

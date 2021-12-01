@@ -379,11 +379,25 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($A
 
 #Default route and blackhole route for BGP and set private ASN number
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
-
 "@
+
+If($VyOSConfig.ResetVPNConfigs){
+    $VyOSFinal += @"
+`n
+reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
+"@
+}
+
+foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+    $VyOSFinal += @"
+`n
+set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
+"@
+
 
 If($UseBGP){
     $VyOSFinal += @"
+`n
 #BGP for Azure East
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) ebgp-multihop '8'
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) remote-as '$($bgpsettings.Asn)'
@@ -409,7 +423,8 @@ run show ipsec vpn sa
 
 #Always output script
 $ScriptName = $LogfileName.replace('.log','.script')
-$VyOSFinal -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
+Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
+$VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
 If($RouterAutomationMode)

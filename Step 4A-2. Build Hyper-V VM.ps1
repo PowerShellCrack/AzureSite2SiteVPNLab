@@ -111,6 +111,8 @@ Try{
         -AutomaticStartAction StartIfRunning -AutomaticStopAction ShutDown -CheckpointType Disabled `
         -DynamicMemory -ErrorAction Stop | Out-Null
 
+    #Generation 1 Set-VMBios -StartupOrder@("IDE","CD","LegacyNetworkAdapter","Floppy")
+
     Remove-VMCheckpoint -VMName $HyperVSimpleVM.Name -ErrorAction SilentlyContinue
     #enable secureboot
     Set-VMFirmware -VMName $HyperVSimpleVM.Name -EnableSecureBoot
