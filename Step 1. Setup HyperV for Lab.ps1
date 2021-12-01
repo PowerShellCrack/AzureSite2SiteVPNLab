@@ -19,7 +19,7 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 
 
 #install hyper-V feature
-Write-Host ("Enabling Hyper-V role...") -NoNewline
+Write-Host ("Enabling Hyper-V role...") -ForegroundColor White -NoNewline
 If( (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).State -ne 'Enabled'){
     $HyperVResult = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
     If($HyperVResult.RestartNeeded -eq $true){
@@ -31,7 +31,7 @@ Else{
 }
 
 #region Configure Hyper-V settings
-Write-Host ("Setting up Hyper-V...") -NoNewline
+Write-Host ("Setting up Hyper-V...") -ForegroundColor White -NoNewline
 If( ($HyperVConfig.ChangeLocation) -and ((Get-VMHost).VirtualMachinePath -ne $HyperVConfig.VirtualMachineLocation) -or ((Get-VMHost).VirtualHardDiskPath -ne $HyperVConfig.VirtualHardDiskLocation) ){
     New-Item $HyperVConfig.VirtualMachineLocation -ItemType Directory -ErrorAction SilentlyContinue
     New-Item $HyperVConfig.VirtualHardDiskLocation -ItemType Directory -ErrorAction SilentlyContinue
@@ -44,10 +44,10 @@ Write-Host "Done" -ForegroundColor Green
 #endregion
 
 #region Create External Switch
-Write-Host ("Configuring Hyper-V External switch...") -NoNewline
+Write-Host ("Configuring Hyper-V External switch...") -ForegroundColor White -NoNewline
 #Grab physical network that is connected to the internet
 $InternetConnectedAdapter = Get-NetAdapter -Physical | Where-Object {$_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch "Xbox"} | Sort-Object $_.LinkSpeed | Select-Object -First 1
-If($null -eq $InternetConnectedAdapter){ Write-Host ("There is no known physical adapter connect to the internet. Unable to continue! ") -ForegroundColor Red;Break}
+If($null -eq $InternetConnectedAdapter){ Write-Host ("There is no known physical adapter connect to the internet. Unable to continue! ") -ForegroundColor Black -BackgroundColor Red;Break}
 
 #check if there are any external switches; if not create one
 $HyperVSwitches = Get-VMSwitch
@@ -62,7 +62,7 @@ ElseIf( ($InternetConnectedAdapter.InterfaceGuid -replace '^{|}$','') -notin ($H
         Write-Host ("Changed to [{0}]" -f $InternetConnectedAdapter.Name) -ForegroundColor Yellow
     }
     Catch{
-        Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Red
+        Write-Host ("{0}" -f $_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
     }
 }
 Else{
@@ -76,7 +76,7 @@ $i = 1
 Foreach($Subnet in $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Name)
 {
     $NetworkName = $Subnet.Name
-    Write-Host ("Configuring Hyper-V internal switch [{0}]..." -f $NetworkName) -NoNewline
+    Write-Host ("Configuring Hyper-V internal switch [{0}]..." -f $NetworkName) -ForegroundColor White -NoNewline
     $Description = $HyperVConfig.VirtualSwitchNetworks[$Subnet.Name]
     #$Description = ("{2} for {1}: {0}" -f $Subnet.Name,$VyOSConfig.LocalSubnetPrefix[$Subnet.Name],$vYosConfig.NetPrefix)
     If( $HyperVSwitches | Where Name -eq $NetworkName ){

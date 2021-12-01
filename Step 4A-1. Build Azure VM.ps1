@@ -68,7 +68,7 @@ Write-Host ("Virtual Machine name will be [{0}]" -f $AzureSimpleVM.Name)  -Foreg
 #region 1. Create a resource group:
 If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -NoNewline
+    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -ForegroundColor White -NoNewline
     Try{
         New-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
         Write-Host "Done" -ForegroundColor Green
@@ -87,7 +87,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 
 If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
             -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureSimpleConfig.StorageSku} | Select -First 1)){
-    Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -NoNewline
+    Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -ForegroundColor White -NoNewline
     Try{
         $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
         $storageName = ($RegionName +'-' + $randomChar).ToLower() -replace '[\W]', ''
@@ -112,7 +112,7 @@ Else{
 $vNet = Get-AzVirtualNetwork -Name $AzureSimpleVM.VNetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue
 
 If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
-    Write-Host ("Creating Azure network security group [{0}]..." -f $AzureSimpleVM.NSGName) -NoNewline
+    Write-Host ("Creating Azure network security group [{0}]..." -f $AzureSimpleVM.NSGName) -ForegroundColor White -NoNewline
     Try{
         $NSG = New-AzNetworkSecurityGroup -Name $AzureSimpleVM.NSGName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
         $NSG | Add-AzNetworkSecurityRuleConfig -Name "Allow_Port_3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
@@ -138,7 +138,7 @@ Else{
 
 #region Attach VM to second subnet which should be defaultsubnet
 $VMSubnet = $vNet.Subnets | Where Name -eq $AzureSimpleVM.SubnetName
-Write-Host ("Attaching VM's network interface [{0}] to subnet [{1}]..." -f $AzureSimpleVM.NICName,$AzureSimpleVM.SubnetName) -NoNewline
+Write-Host ("Attaching VM's network interface [{0}] to subnet [{1}]..." -f $AzureSimpleVM.NICName,$AzureSimpleVM.SubnetName) -ForegroundColor White -NoNewline
 Try{
     $NIC = New-AzNetworkInterface -Name $AzureSimpleVM.NICName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                 -Location $AzureSimpleConfig.LocationName -SubnetId $VMSubnet.Id -Force
@@ -168,7 +168,7 @@ If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).
 }
 
 
-Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $AzureSimpleVM.LocalAdminUser,$AzureSimpleVM.Name) -NoNewline
+Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $AzureSimpleVM.LocalAdminUser,$AzureSimpleVM.Name) -ForegroundColor White -NoNewline
 $LocalAdminSecurePassword = ConvertTo-SecureString $AzureSimpleVM.LocalAdminPassword -AsPlainText -Force
 $Credential = New-Object System.Management.Automation.PSCredential ($AzureSimpleVM.LocalAdminUser, $LocalAdminSecurePassword)
 Write-Host "Done" -ForegroundColor Green
@@ -191,7 +191,7 @@ $VMConfig = Set-AzVMSourceImage -VM $VMConfig -PublisherName 'MicrosoftWindowsSe
 $VMConfig = Set-AzVMBootDiagnostic -Disable -VM $VMConfig
 #Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -StorageAccountName $StorageAccount
 Try{
-    Write-Host ("Deploying virtual machine [{0}]..." -f $AzureSimpleVM.Name) -NoNewline
+    Write-Host ("Deploying virtual machine [{0}]..." -f $AzureSimpleVM.Name) -ForegroundColor White -NoNewline
     New-AzVM -VM $VMConfig -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
     Write-Host "Done" -ForegroundColor Green
 }
@@ -212,7 +212,7 @@ If($AzureSimpleVM.EnableAutoShutdown){
     If($AzureSimpleVM.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam +=@{WebhookUrl=$AzureSimpleVM.AutoShutdownNotificationType}}
 
     Try{
-        Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $AzureSimpleVM.Name) -NoNewline
+        Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $AzureSimpleVM.Name) -ForegroundColor White -NoNewline
         Set-AzVMAutoShutdown -Enable -Name $AzureSimpleVM.Name -ResourceGroupName $AzureSimpleConfig.ResourceGroupName @ShutdownParam | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }

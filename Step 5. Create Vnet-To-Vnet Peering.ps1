@@ -30,7 +30,7 @@ Else{
 
 $vNetA=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
 Try{
-  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteBSpoke') -ForegroundColor Yellow -NoNewline
+  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteBSpoke') -ForegroundColor White -NoNewline
   Add-AzVirtualNetworkPeering -Name 'ToSiteBSpoke' -VirtualNetwork $vNetA `
       -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteBSubscriptionID)/resourceGroups//$($AzureAdvConfigSiteB.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteB.VnetHubSubnetName)" `
       -AllowGatewayTransit -AllowForwardedTraffic | Out-Null
@@ -41,7 +41,7 @@ Catch{
     Break
 }
 Finally{
-  Clear-AzDefault
+    Clear-AzDefault
 }
 
 If( ($AzureVnetToVnetPeering.SiteBTenantID -notmatch 'TenantBID') -and ($AzureVnetToVnetPeering.SiteBSubscriptionID -notmatch 'SubscriptionBID') ){
@@ -55,7 +55,7 @@ Else{
 
 $vNetB=Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
 Try{
-  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteASpoke') -ForegroundColor Yellow -NoNewline
+  Write-Host ("Building vnet peering to first SiteA Tenant's vnet [{0}]" -f 'ToSiteASpoke') -ForegroundColor White -NoNewline
   Add-AzVirtualNetworkPeering -Name 'ToSiteASpoke' -VirtualNetwork $vNetB `
           -RemoteVirtualNetworkId "/subscriptions/$($AzureVnetToVnetPeering.SiteASubscriptionID)/resourceGroups/$($AzureAdvConfigSiteA.ResourceGroupName)/providers/Microsoft.Network/virtualNetworks/$($AzureAdvConfigSiteA.VnetHubSubnetName)" `
           -AllowForwardedTraffic -UseRemoteGateways | Out-Null

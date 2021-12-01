@@ -32,13 +32,13 @@ Else{
 $LogfileName = "$RegionName-HyperVVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
-If(-Not(Test-Path $HyperVSimpleVM.ISOLocation)){Write-Host ("Unable to find ISO: [{0}]. Please update config variable [`$HyperVVmIsoPath] and rerun setup" -f $HyperVSimpleVM.ISOLocation) -ForegroundColor Red;Break}
+If(-Not(Test-Path $HyperVSimpleVM.ISOLocation)){Write-Host ("Unable to find ISO: [{0}]. Please update config variable [`$HyperVVmIsoPath] and rerun setup" -f $HyperVSimpleVM.ISOLocation) -ForegroundColor Black -BackgroundColor Red;Break}
 
 #check drive space availability
 $DriveLetter = (Get-Item $HyperVConfig.VirtualHardDiskLocation).PSDrive.Name
 $disk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($DriveLetter):'" | Select-Object *
 If($disk.FreeSpace -le $HyperVSimpleVM.HDDSize){
-    Write-Host ("Not enough drive space [{1}GB] on [{0}]" -f $HyperVConfig.VirtualHardDiskLocation,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Red
+    Write-Host ("Not enough drive space [{1}GB] on [{0}]" -f $HyperVConfig.VirtualHardDiskLocation,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 
@@ -84,7 +84,7 @@ Write-Host ("Virtual Machine name will be [{0}]" -f $HyperVSimpleVM.Name)  -Fore
 #endregion
 
 #region Build VM
-Write-Host ("Creating VM [{0}]..." -f $HyperVSimpleVM.Name) -NoNewline
+Write-Host ("Creating VM [{0}]..." -f $HyperVSimpleVM.Name) -ForegroundColor White -NoNewline
 
 Try{
     If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue){
@@ -93,7 +93,7 @@ Try{
     New-VHD -Path $VHDxFilePath -SizeBytes $HyperVSimpleVM.HDDSize -Dynamic -ErrorAction stop | Out-Null
 }
 Catch{
-    Write-Host ("Unable to create VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Red
+    Write-Host ("Unable to create VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 
@@ -125,7 +125,7 @@ Try{
     }
 }
 Catch{
-    Write-Host ("Unable to build the VM: [{0}]. {1}" -f $HyperVSimpleVM.Name,$_.Exception.Message) -ForegroundColor Red
+    Write-Host ("Unable to build the VM: [{0}]. {1}" -f $HyperVSimpleVM.Name,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 Write-Host "Done" -ForegroundColor Green
@@ -149,7 +149,7 @@ If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).
 }
 
 
-Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $HyperVSimpleVM.LocalAdminUser,$HyperVSimpleVM.Name) -NoNewline
+Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $HyperVSimpleVM.LocalAdminUser,$HyperVSimpleVM.Name) -ForegroundColor White -NoNewline
 $LocalAdminSecurePassword = ConvertTo-SecureString $HyperVSimpleVM.LocalAdminPassword -AsPlainText -Force
 $Credential = New-Object System.Management.Automation.PSCredential ($HyperVSimpleVM.LocalAdminUser, $LocalAdminSecurePassword)
 Write-Host "Done" -ForegroundColor Green

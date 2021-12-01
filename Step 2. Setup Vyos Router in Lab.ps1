@@ -43,14 +43,14 @@ If(-Not(Test-Path $VyOSConfig.ISOLocation)){Write-Host ("Unable to find VyOS ISO
 $DriveLetter = (Get-Item $HyperVConfig.VirtualHardDiskLocation).PSDrive.Name
 $disk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($DriveLetter):'" | Select-Object *
 If($disk.FreeSpace/1GB -le 2){
-    Write-Host ("Unable to create VHD: [{0}]. Not enough drive space [{1}GB]" -f $VHDxFilePath,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Red
+    Write-Host ("Unable to create VHD: [{0}]. Not enough drive space [{1}GB]" -f $VHDxFilePath,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 
 #region Create VyOS VM
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 If($null -eq $VM){
-    Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -NoNewline
+    Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -ForegroundColor White -NoNewline
     $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
     Try{
         If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue ){
@@ -59,7 +59,7 @@ If($null -eq $VM){
         New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
     }
     Catch{
-        Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Red
+        Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
         Break
     }
 
@@ -79,7 +79,7 @@ If($null -eq $VM){
         #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Connect-VMNetworkAdapter -SwitchName $VmSwitchExternal -ErrorAction Stop
     }
     Catch{
-        Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Red
+        Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
         Break
     }
     Write-Host "Done" -ForegroundColor Green
@@ -214,7 +214,7 @@ ForEach($Network in $VyOSNetworks)
     }
     Else{
         Try{
-            Write-Host ("Attaching network [{0}] to [{1}]..." -f $Network.Name,$VM.VMName) -NoNewline
+            Write-Host ("Attaching network [{0}] to [{1}]..." -f $Network.Name,$VM.VMName) -ForegroundColor White -NoNewline
             Add-VMNetworkAdapter -VMName $VM.VMName -SwitchName $Network.Name -ErrorAction Stop
             Write-Host ("Done") -ForegroundColor Green
         }
@@ -229,7 +229,7 @@ Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 #wait for VM to boot completely
 Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
 do {
-    Write-Host "." -NoNewline
+    Write-Host "." -ForegroundColor White -NoNewline
     Start-Sleep 3
 } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 #endregion
@@ -378,7 +378,7 @@ If($RouterAutomationMode){
         #wait for VM to boot completely
         Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
         do {
-            Write-Host "." -NoNewline
+            Write-Host "." -ForegroundColor Yellow -NoNewline
             Start-Sleep 3
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 

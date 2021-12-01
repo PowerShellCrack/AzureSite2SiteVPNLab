@@ -38,7 +38,7 @@ $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
 #region 1. Create a resource group:
 If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -NoNewline
+    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -ForegroundColor White -NoNewline
     Try{
         New-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
         Write-Host "Done" -ForegroundColor Green
@@ -54,7 +54,7 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 
 
 #region 2. Configure subnets
-Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetSubnetPrefix) -NoNewline
+Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetSubnetPrefix) -ForegroundColor White -NoNewline
 Try{
     $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
     $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
@@ -68,7 +68,7 @@ Catch{
 #region 3. Create the VNet
 If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureSimpleConfig.VnetName) -NoNewline
+    Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureSimpleConfig.VnetName) -ForegroundColor White -NoNewline
     Try{
         New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                 -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 | Out-Null
@@ -90,7 +90,7 @@ $vNet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupNam
 # add gateway prefix if not already exists
 If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureSimpleConfig.VnetGatewayPrefix )
 {
-    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetName) -NoNewline
+    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetName) -ForegroundColor White -NoNewline
     Try{
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix -VirtualNetwork $vNet | Out-Null
         Write-Host "Done" -ForegroundColor Green
@@ -108,7 +108,7 @@ Set-AzVirtualNetwork -VirtualNetwork $vNet | Out-Null
 #add a local network gateway with a single address prefix:
 If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
-    Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
+    Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         #New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
         #            -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
@@ -131,7 +131,7 @@ Else{
 #region 6. Create a Public IP address
 If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpAddress )
 {
-    Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIpName) -NoNewline
+    Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIpName) -ForegroundColor White -NoNewline
     Try{
         New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                         -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic | Out-Null
@@ -151,7 +151,7 @@ Else{
 #region 7. make the gateway
 If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNet -ErrorAction SilentlyContinue )
 {
-    Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIpName, 'GatewaySubnet') -NoNewline
+    Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIpName, 'GatewaySubnet') -ForegroundColor White -NoNewline
     Try{
         #$vNet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureSimpleConfig.VnetGatewayIpConfigName -SubnetId $subnet.Id -PublicIpAddressId $azpip.Id
@@ -163,7 +163,7 @@ If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNet
     }
 }
 Else{
-    Write-Host ("No gateway subnet was found [{0}]" -f $AzureSimpleConfig.VnetGatewayIpConfigName) -ForegroundColor Red
+    Write-Host ("No gateway subnet was found [{0}]" -f $AzureSimpleConfig.VnetGatewayIpConfigName) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 #endregion
@@ -172,7 +172,7 @@ Else{
 #Check to see if public IP is attached to VNG
 If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 {
-    Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureSimpleConfig.VnetGatewayName) -NoNewline
+    Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureSimpleConfig.VnetGatewayName) -ForegroundColor White -NoNewline
     Try{
         $stopwatch =  [system.diagnostics.stopwatch]::StartNew()
         #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings
@@ -196,7 +196,7 @@ Else{
 #region 9. Create the Virtual Network Gateway
 If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
-    Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
+    Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                 -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
@@ -250,7 +250,7 @@ Elseif( $null -eq $currentGwConnection)
     $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
     $Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
 
-    Write-host ("Create the VPN connection for [{0}]..." -f $AzureSimpleConfig.ConnectionName) -NoNewline
+    Write-host ("Create the VPN connection for [{0}]..." -f $AzureSimpleConfig.ConnectionName) -ForegroundColor White -NoNewline
     Try{
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
@@ -285,7 +285,10 @@ Else{
 
 # be sure to grab the public ip again
 $azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-
+If($azpip.IpAddress -eq 'Not Assigned'){
+    Write-Host ("Public IP is not assigned. Please wait 10 mins to rerun script!") -ForegroundColor Black -BackgroundColor Yellow
+    Break
+}
 
 #region 10. Build VyOS VPN Configuration Commands
 $VyOSFinal = @"
@@ -382,7 +385,7 @@ If($RouterAutomationMode)
         Write-Host "Completed..." -ForegroundColor Green -NoNewline
         Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
         do {
-            Write-Host "." -NoNewline
+            Write-Host "." -ForegroundColor Yellow -NoNewline
             Start-Sleep 3
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
