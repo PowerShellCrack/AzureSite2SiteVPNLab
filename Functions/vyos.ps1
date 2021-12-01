@@ -37,6 +37,7 @@ Function New-SSHSharedKey{
         [ValidateScript({Test-IPAddress $_})]
 		[string]$IP,
 		[string]$User = 'root',
+        [switch]$Persistent,
 		[switch]$Force
 	)
 
@@ -102,14 +103,28 @@ Function New-SSHSharedKey{
                 Write-Host "INFO: Copying $env:USERPROFILE\.ssh\id_rsa.pub to $IP..." -NoNewLine
                 start-sleep 5
                 Write-Host "When prompted, please type $User password..." -ForegroundColor Cyan
-                #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:~/tmp.pub'" -PassThru -Wait
-                Write-Verbose "scp -o 'StrictHostKeyChecking no' `"$id_rsa_Location.pub`" `"${remoteSSHServerLogin}:~/tmp.pub`""
-                scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+                #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:/tmp/rsa.pub'" -PassThru -Wait
+                Write-Verbose "scp -o 'StrictHostKeyChecking no' `"$id_rsa_Location.pub`" `"${remoteSSHServerLogin}:/tmp/rsa.pub`""
+                scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:/tmp/rsa.pub"
                 Write-Host "INFO: Updating authorized_keys on $IP..." -NoNewLine
                 start-sleep 5
-                Write-Verbose "ssh `"${remoteSSHServerLogin}`" `"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub`""
-                ssh "${remoteSSHServerLogin}" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/tmp.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm -f ~/tmp.pub"
-                #TEST & scp -o 'StrictHostKeyChecking no' -i ./.ssh/id_rsa "$id_rsa_Location.pub" "${remoteSSHServerLogin}:~/tmp.pub"
+                $bashcmd = "mkdir -p ~/.ssh"
+                $bashcmd += "chmod 700 ~/.ssh"
+                $bashcmd += "cat /tmp/rsa.pub >> ~/.ssh/authorized_keys"
+                $bashcmd += "chmod 600 ~/.ssh/authorized_keys"
+                If($Persistent){
+                    $bashcmd += "echo '#!/bin/bash' >> /config/scripts/vyatta-preconfig-bootup.script"
+                    $bashcmd += "echo 'cat /tmp/rsa.pub >> ~/.ssh/authorized_keys' >> /config/scripts/vyatta-preconfig-bootup.script"
+                    $bashcmd += "echo 'chmod 600 ~/.ssh/authorized_keys' >> /config/scripts/vyatta-preconfig-bootup.script"
+                }
+                Else{
+                    $bashcmd += "rm -f /tmp/rsa.pub"
+                }
+                #join all commands as single line separated with &&
+                $bashcmd = $bashcmd -join ' && '
+                Write-Verbose "ssh `"${remoteSSHServerLogin}`" `"$bashcmd`""
+                ssh "${remoteSSHServerLogin}" "$bashcmd"
+                #TEST & scp -o 'StrictHostKeyChecking no' -i ./.ssh/id_rsa "$id_rsa_Location.pub" "${remoteSSHServerLogin}:/tmp/rsa.pub"
             }
     	}
     	else

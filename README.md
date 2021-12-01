@@ -106,15 +106,19 @@ There are few options when building the Site2Site VPN lab:
 
   _Option A_: **Step 3A. Build Azure Basic S2S.ps1** <-- Sets up a very basic azure S2S VPN , no hub and spoke configurations.
 
-  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Run script:
+  _Option B_: **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1** <--Sets up a more complex Azure S2S VPN with hub and spoke design. Also run scripts:
 
-  _Option C_: Sets up a duplicate Azure S2S VPN on another region and connects the two. Run scripts [in order]:
+1. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1** <-- Optional if you want to setup a second site
+2. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1** <-- Only Required if a second site is setup
 
-1. **Step 3B-1. Build Azure Advanced S2S - Region 1.ps1**
-2. **Step 3B-2. Build Azure Advanced S2S - Region 2.ps1**
-3. **Step 3B-3. Connect Azure Advanced S2S Regions.ps1**
+  _Option C_: **Step 3C. Attach Azure S2S to Existing Network.ps1** <-- Connect to an existing Azure network. You must run it like this:
 
-<span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, it will check all configurations and attempt to repair and issues. this can be useful when public IP has changed on home network</span>
+<span style="background-color:Yellow;">**NOTE: If connected to Azure, hit tab for the virtualNetwork and Resourcegroup values to iterate through existing Azure resources. </span>
+```powershell
+  & '.\Step 3C. Attach Azure Basic S2S to Existing.ps1' -Prefix contoso -ResourceGroup mecmcb-arm-rg -VirtualNetwork contoso-vnet
+```
+
+<span style="background-color:Red;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, it will check all configurations and attempt to repair and issues. this can be useful when public IP has changed on home network</span>
 
 If all went well, the vyos router will connect each Azure site.
 ### Azure VM
@@ -124,7 +128,7 @@ The last thing to do is setup a VM in your Azure lab without Public IP and conne
 To setup a VM, run the script corresponding to the type of Azure VPN you set up prior:
 
 
-  _Option 1_: **Step 4A. Build Azure VM.ps1**
+  _Option 1_: **Step 4A-1. Build Azure VM.ps1**
 
   _Option 2_: **Step 4B-1. Build Azure VM - Region 1.ps1**
 
@@ -132,6 +136,8 @@ To setup a VM, run the script corresponding to the type of Azure VPN you set up 
 
 1. **Step 4B-1. Build Azure VM - Region 1.ps1**
 2. **Step 4B-2. Build Azure VM - Region 2.ps1**
+
+_BETA_: **Step 4A-2. Build Hyper-V VM.ps1** <-- Sets up a VM in Hyper-V.
 
 <span style="background-color:Yellow;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, The script with create another VM incrementing the name automatically or you can specify an name like so:</span>
 ```powershell
@@ -142,7 +148,8 @@ To setup a VM, run the script corresponding to the type of Azure VPN you set up 
 
 ## References
 
-- [Create a VPN Gateway and add a Site-to-Site connection using PowerShell](https://docs.microsoft.com/en-us/azure/vpn-gateway/scripts/vpn-gateway-sample-site-to-site-powershell)
+- [Create a VPN Gateway and add a Site-to-Site connection using PowerShell](https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell)
+- [Site-to-Site Powershell Sample script](https://docs.microsoft.com/en-us/azure/vpn-gateway/scripts/vpn-gateway-sample-site-to-site-powershell)
 - [Hub-spoke network topology with shared services in Azure](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/hybrid-networking/shared-services)
 - [VYOS Releases](http://packages.vyos.net/iso/release/)
 - [How to install VyOS Router/Appliance on Hyper-V](http://luisrato.azurewebsites.net/2014/06/17/)

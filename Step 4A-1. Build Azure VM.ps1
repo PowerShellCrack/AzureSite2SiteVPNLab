@@ -43,7 +43,7 @@ If($VMName)
     #Azure vm can be 64 characters long but the computername cannot
     $computername = $VMName | Set-TruncateString -length 15
     $newVMname =  $VMName.ToLower()
-    $newNIC = $VMName.ToLower() + '-nic'
+    $newNIC = $VMName.ToLower() + '-ni'
 }
 Else{
     #Increment VM name and nic
@@ -51,7 +51,8 @@ Else{
     do {
         $computername = ($AzureSimpleVM.ComputerName -replace '\d+$', $i)
         $newVMname = ($AzureSimpleVM.Name -replace '\d+$', $i)
-        $newNIC = ($AzureSimpleVM.NICName -replace '\d+', $i)
+        #only replace last digit in name (incase multiple digits exist)
+        $newNIC = ($AzureSimpleVM.NICName -replace '\d(?!.*\d)', $i)
         $i++
     } until ($newVMname -notin $VMs.Name)
 }

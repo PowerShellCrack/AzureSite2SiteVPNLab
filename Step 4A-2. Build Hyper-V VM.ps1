@@ -61,7 +61,7 @@ If($VMName)
     $newVMname =  $VMName.ToUpper()
 }
 Else{
-    #Increment VM name and nic
+    #Increment VM
     $i=1
     do {
         $computername = ($HyperVSimpleVM.ComputerName -replace '\d+$', $i).ToUpper()

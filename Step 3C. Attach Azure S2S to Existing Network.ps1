@@ -1,3 +1,47 @@
+Param(
+    [string]$Prefix,
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $vNets = Get-AzVirtualNetwork | Select -ExpandProperty Name
+
+        $vNets | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("vNet")]
+    [string]$VirtualNetwork,
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $RGs = Get-AzResourceGroup | Select -ExpandProperty ResourceGroupName
+
+        $RGs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("rg")]
+    [string]$ResourceGroup
+)
+<#
+#TEST VARIABLES
+$Prefix='contoso'
+$ResourceGroup='mecmcb-arm-rg'
+$VirtualNetwork='contoso-vnet'
+#>
+
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
@@ -16,8 +60,20 @@ Else{
 }
 #endregion
 
+#if prefix specified, make it lower case else use config's prefix
+If($Prefix){$Prefix = $Prefix.ToLower()}Else{$Prefix = $LabPrefix.ToLower()}
+
+$AzureExistingConfig = @{
+
+    LocalGatewayName = $Prefix + '-lng'
+    PublicIPName = $Prefix + '-pip'
+    ConnectionName = ('sitetosite-connection-to-' + $Prefix)
+
+    TunnelDescription = ('Gateway to ' + $Prefix + ' in Azure').Replace('-',' ')
+}
+
 #region start transcript
-$LogfileName = "$RegionName-AzureSimpleS2S-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$Prefix-$ResourceGroup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 #endregion
 
@@ -35,29 +91,94 @@ $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
 
 
 #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell
-#region 1. Create a resource group:
-If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
+#region 1. Grab the resource group:
+If($RG = Get-AzResourceGroup -Name $ResourceGroup -ErrorAction SilentlyContinue)
 {
-    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureSimpleConfig.ResourceGroupName) -NoNewline
-    Try{
-        New-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-        Break
-    }
-}Else{
-    Write-Host ("Using Azure resource group [{0}]" -f $AzureSimpleConfig.ResourceGroupName) -ForegroundColor Green
+    $Location = $RG.Location
+    Write-Host ("The Azure resource group [{0}] is in [{1}]..." -f $RG.ResourceGroupName,$Location)
+}
+Else{
+    Write-Host ("The specified Azure resource group [{0}] does not exist. You must use an existing Resource Group." -f $ResourceGroup) -ForegroundColor Black -BackgroundColor Red
+    Break
 }
 #endregion
 
 
+#append to hashtable
+$AzureExistingConfig['ResourceGroupName'] = $RG.ResourceGroupName
+$AzureExistingConfig['LocationName'] = $RG.Location
+
+
+#region 2. Find Virtual network
+If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue)
+{
+    $vNetHubExist = $false
+    $vNetSpokeExist = $false
+    If($vNets.count -gt 1){
+       If($vNets.Name -eq $VirtualNetwork){
+            $vNet = $vNets | Where Name -eq $VirtualNetwork
+            $vNetName = $vNet.Name
+            $vNetLocation = $vNet.Location
+            $vNetCidr = $vNet.AddressSpace.AddressPrefixes
+            $vNetSubnets = $vNet.Subnets.AddressPrefix
+            $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -eq 'GatewaySubnet'
+            Write-Host ("Found Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+       }
+
+       If($vNets.Name -match 'Spoke'){
+            $vNetSpokeExist = $true
+            $vNetSpoke = $vNets | Where Name -match 'Spoke'
+            $vNetSpokeName = $vNetSpoke.Name
+            $vNetSpokeLocation = $vNetSpoke.Location
+            $vNetSpokeCidr = $vNetSpoke.AddressSpace.AddressPrefixes
+            $vNetSpokeSubnets = $vNetSpoke.Subnets.AddressPrefix
+
+            Write-Host ("Found Spoke Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetSpokeName,($vNetSpokeCidr -join ','),($vNetSpokeSubnets -join ','))
+       }
+
+       If($vNets.Name -match 'Hub'){
+            $vNetHubExist = $true
+            $vNet = $vNets | Where Name -match 'Hub'
+            $vNetName = $vNetHub.Name
+            $vNetLocation = $vNetHub.Location
+            $vNetCidr = $vNetHub.AddressSpace.AddressPrefixes
+            $vNetSubnets = $vNetHub.Subnets.AddressPrefix
+            $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNetHub -ErrorAction SilentlyContinue  | Where Name -eq 'GatewaySubnet'
+            Write-Host ("Found Hub Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+       }
+    }
+    Else{
+        $vNet = $vNets
+        $vNetName = $vNet.Name
+        $vNetLocation = $vNet.Location
+        $vNetCidr = $vNet.AddressSpace.AddressPrefixes
+        $vNetSubnets = $vNet.Subnets.AddressPrefix
+        $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -eq 'GatewaySubnet'
+        Write-Host ("Found single Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+    }
+
+    $AvailableSubnetsFromVnetCIDR = Get-SimpleSubnets -Cidr $vNetCidr
+
+    #append to hashtable
+    $AzureExistingConfig['VnetName'] = $vNetName
+    $AzureExistingConfig['VnetGatewayName'] = $Prefix + '-vng'
+    $AzureExistingConfig['VnetCIDRPrefix'] = $vNetCidr
+    $AzureExistingConfig['DefaultSubnetName'] = $Prefix + '-default-subnet'
+    $AzureExistingConfig['VnetSubnetPrefix'] = $vNetSubnets
+    $AzureExistingConfig['VnetGatewayPrefix'] = ($AvailableSubnetsFromVnetCIDR[-1] -replace '/\d+$', '/26')
+    $AzureExistingConfig['VnetGatewayIpConfigName'] = $Prefix + '-gateway-ipconfig'
+}
+Else{
+    Write-Host ("The specified Azure virtual network [{0}] does not exist. You must use an existing Resource Group." -f $AzureExistingConfig.ResourceGroupName) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
+#endregion
+
 #region 2. Configure subnets
-Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetSubnetPrefix) -NoNewline
+Write-Host ("Building Azure subnets configurations for both gateway subnet [{0}] and subnets [{1}]..." -f $AzureExistingConfig.VnetGatewayPrefix,($AzureExistingConfig.VnetSubnetPrefix -join ',')) -NoNewline
 Try{
-    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix
-    $subnet2 = New-AzVirtualNetworkSubnetConfig -Name $AzureSimpleConfig.DefaultSubnetName -AddressPrefix $AzureSimpleConfig.VnetSubnetPrefix
+    $subnet1 = New-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureExistingConfig.VnetGatewayPrefix
+    $subnet2 = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -ne 'GatewaySubnet'
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
@@ -66,12 +187,12 @@ Catch{
 #endregion
 
 #region 3. Create the VNet
-If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
+If(-Not(Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureSimpleConfig.VnetName) -NoNewline
+    Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureExistingConfig.VnetName) -NoNewline
     Try{
-        New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 | Out-Null
+        New-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                -Location $AzureExistingConfig.LocationName -AddressPrefix $AzureExistingConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -79,20 +200,42 @@ If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupNam
         Break
     }
 }
-Else{
-    Write-Host ("Using Azure virtual network [{0}]" -f $AzureSimpleConfig.VnetName) -ForegroundColor Green
-}
-#endregion
-
-
-#region 4. Attach gateway to vnet
-$vNet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-# add gateway prefix if not already exists
-If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureSimpleConfig.VnetGatewayPrefix )
+Else
 {
-    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureSimpleConfig.VnetGatewayPrefix,$AzureSimpleConfig.VnetName) -NoNewline
+    Write-Host ("Updating Azure virtual network [{0}]..." -f $AzureExistingConfig.VnetName) -NoNewline
     Try{
-        Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureSimpleConfig.VnetGatewayPrefix -VirtualNetwork $vNet | Out-Null
+        New-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                -Location $AzureExistingConfig.LocationName -AddressPrefix $AzureExistingConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 -Force | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+
+#endregion
+#region 4. Attach gateway to vnet
+$vNet = Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+# add gateway prefix if not already exists
+If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureExistingConfig.VnetGatewayPrefix){
+
+    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureExistingConfig.VnetGatewayPrefix,$AzureExistingConfig.VnetName) -NoNewline
+    Try{
+        Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureExistingConfig.VnetGatewayPrefix -VirtualNetwork $vNet | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+ElseIf( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureExistingConfig.VnetGatewayPrefix )
+{
+    Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureExistingConfig.VnetGatewayPrefix,$AzureExistingConfig.VnetName) -NoNewline
+    Try{
+        Remove-AzVirtualNetworkSubnetConfig  -Name 'GatewaySubnet' -VirtualNetwork $vNet | Out-Null
+        Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -AddressPrefix $AzureExistingConfig.VnetGatewayPrefix -VirtualNetwork $vNet | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -102,19 +245,18 @@ If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'Ga
 }
 
 Set-AzVirtualNetwork -VirtualNetwork $vNet | Out-Null
+
+
 #endregion
 
 #region 5. Create the local network gateway
 #add a local network gateway with a single address prefix:
-If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
+If( -Not(Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
-    Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
+    Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureExistingConfig.LocalGatewayName) -NoNewline
     Try{
-        #New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-        #            -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
-
-        New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP `
+        New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                    -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP `
                     -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -124,18 +266,18 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -Re
     }
 }
 Else{
-    Write-Host ("Using Azure local network gateway [{0}]" -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor Green
+    Write-Host ("Using Azure local network gateway [{0}]" -f $AzureExistingConfig.LocalGatewayName) -ForegroundColor Green
 }
 #endregion
 
 #region 6. Create a Public IP address
-If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpAddress )
+If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureExistingConfig.PublicIpName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpAddress )
 {
-    Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIpName) -NoNewline
+    Write-Host ("Creating Azure public IP [{0}]..." -f $AzureExistingConfig.PublicIpName) -NoNewline
     Try{
-        New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                        -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic | Out-Null
-        $azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+        New-AzPublicIpAddress -Name $AzureExistingConfig.PublicIpName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                        -Location $AzureExistingConfig.LocationName -AllocationMethod Dynamic | Out-Null
+        $azpip = Get-AzPublicIpAddress -Name $AzureExistingConfig.PublicIpName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -144,17 +286,17 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpN
     }
 }
 Else{
-    Write-Host ("Using Azure public ip [{0}] with ip [{1}]" -f $AzureSimpleConfig.PublicIPName,$azpip.IpAddress) -ForegroundColor Green
+    Write-Host ("Using Azure public ip [{0}] with ip [{1}]" -f $AzureExistingConfig.PublicIPName,$azpip.IpAddress) -ForegroundColor Green
 }
 #endregion
 
 #region 7. make the gateway
 If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNet -ErrorAction SilentlyContinue )
 {
-    Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIpName, 'GatewaySubnet') -NoNewline
+    Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureExistingConfig.PublicIpName, 'GatewaySubnet') -NoNewline
     Try{
-        #$vNet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-        $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureSimpleConfig.VnetGatewayIpConfigName -SubnetId $subnet.Id -PublicIpAddressId $azpip.Id
+        #$vNet = Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+        $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureExistingConfig.VnetGatewayIpConfigName -SubnetId $subnet.Id -PublicIpAddressId $azpip.Id
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -163,21 +305,21 @@ If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNet
     }
 }
 Else{
-    Write-Host ("No gateway subnet was found [{0}]" -f $AzureSimpleConfig.VnetGatewayIpConfigName) -ForegroundColor Red
+    Write-Host ("No gateway subnet was found [{0}]" -f $AzureExistingConfig.VnetGatewayIpConfigName) -ForegroundColor Red
     Break
 }
 #endregion
 
 #region 8. Create the VPN gateway
 #Check to see if public IP is attached to VNG
-If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
+If( -Not(Get-AzVirtualNetworkGateway -Name $AzureExistingConfig.VnetGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 {
-    Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureSimpleConfig.VnetGatewayName) -NoNewline
+    Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureExistingConfig.VnetGatewayName) -NoNewline
     Try{
         $stopwatch =  [system.diagnostics.stopwatch]::StartNew()
         #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings
-        New-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1 | Out-Null
+        New-AzVirtualNetworkGateway -Name $AzureExistingConfig.VnetGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                -Location $AzureExistingConfig.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1 | Out-Null
         $stopwatch.Stop()
         $totalSecs = [timespan]::fromseconds($stopwatch.Elapsed.TotalSeconds)
         Write-Host ("Completed [{0:hh\:mm\:ss}]" -f $totalSecs) -ForegroundColor Green
@@ -189,17 +331,17 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -R
     }
 }
 Else{
-    Write-Host ("Using Azure virtual network gateway [{0}]" -f $AzureSimpleConfig.VnetGatewayName) -ForegroundColor Green
+    Write-Host ("Using Azure virtual network gateway [{0}]" -f $AzureExistingConfig.VnetGatewayName) -ForegroundColor Green
 }
 #endregion
 
 #region 9. Create the Virtual Network Gateway
-If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
+If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
-    Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -NoNewline
+    Write-host ("Building the local network gateway [{0}]..." -f $AzureExistingConfig.LocalGatewayName) -NoNewline
     Try{
-        New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
+        New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -212,8 +354,8 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
     Try{
         Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
-        New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
+        New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -222,14 +364,14 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
     }
 }
 Else{
-    Write-Host ("Using Azure local network gateway [{0}]" -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor Green
+    Write-Host ("Using Azure local network gateway [{0}]" -f $AzureExistingConfig.LocalGatewayName) -ForegroundColor Green
 }
 #endregion
 
 
 #region 9. Create the VPN connection
-$currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
-            -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue
+$currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
+            -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
 
 If( ($currentGwConnection).ConnectionStatus -eq "Connected")
 {
@@ -247,14 +389,14 @@ ElseIf( ($currentGwConnection).ConnectionStatus -eq "Unknown")
 Elseif( $null -eq $currentGwConnection)
 {
     #create the Site-to-Site VPN connection between your virtual network gateway and your VPN device.
-    $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
-    $Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+    $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureExistingConfig.VnetGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+    $Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
 
-    Write-host ("Create the VPN connection for [{0}]..." -f $AzureSimpleConfig.ConnectionName) -NoNewline
+    Write-host ("Create the VPN connection for [{0}]..." -f $AzureExistingConfig.ConnectionName) -NoNewline
     Try{
         #Create the connection
-        New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-            -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+        New-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+            -Location $AzureExistingConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
             -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -274,7 +416,7 @@ Else{
     If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
@@ -284,7 +426,7 @@ Else{
 #endregion
 
 # be sure to grab the public ip again
-$azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+$azpip = Get-AzPublicIpAddress -Name $AzureExistingConfig.PublicIpName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
 
 
 #region 10. Build VyOS VPN Configuration Commands
@@ -324,14 +466,14 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-sha
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$Global:sharedPSKKey'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureSimpleConfig.TunnelDescription)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureExistingConfig.TunnelDescription)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$VyOSExternalIP'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-nat-networks 'disable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-public-networks 'disable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 local prefix '$($VyOSConfig.LocalCIDRPrefix)'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($AzureSimpleConfig.VnetSubnetPrefix)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($AzureExistingConfig.VnetSubnetPrefix)'
 
 #Default route and blackhole route for BGP and set private ASN number
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
@@ -423,7 +565,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         #check current connection
         Write-Host ("Checking Site-2-Site VPN tunnel connection status...") -ForegroundColor Yellow -NoNewline
         Start-sleep 30
-        $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+        $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
         If($currentGwConnection.ConnectionStatus -eq "Connected")
         {
             Write-Host ("{0}!" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Green
@@ -434,11 +576,11 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
             $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($response2 -eq 'Y'){
-                Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName `
-                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:sharedPSKKey -Force | Out-Null
+                Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:sharedPSKKey -Force | Out-Null
 
-                Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
-                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Force | Out-Null
+                Reset-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
+                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Force | Out-Null
                 Start-Sleep 10
                 $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject
                 #TEST $VyOSFinalScript.value
@@ -464,9 +606,9 @@ If($RunManualSteps)
 {
     #Output information need for local router
     Write-Host "Information needed to configure local router vpn:" -ForegroundColor Yellow
-    Write-Host ("Azure Location:      {0}" -f $AzureSimpleConfig.LocationName)
+    Write-Host ("Azure Location:      {0}" -f $AzureExistingConfig.LocationName)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
-    Write-Host ("Azure Subnet Prefix: {0}" -f $AzureSimpleConfig.VnetSubnetPrefix)
+    Write-Host ("Azure Subnet Prefix: {0}" -f $AzureExistingConfig.VnetSubnetPrefix)
     Write-host ("Shared Key (PSK):    {0}" -f $Global:sharedPSKKey)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)

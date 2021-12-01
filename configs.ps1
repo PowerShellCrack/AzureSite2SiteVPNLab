@@ -270,13 +270,13 @@ If(!$NoAzureCheck){
         If($null -eq $Context){
             Connect-AzAccount -Force
         }
-        If($null -eq $AzSubscription){
-            $AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
-            Set-AzContext -Tenant $AzSubscription.Tenant.id -SubscriptionId $AzSubscription.Subscription.id | Out-Null
+        If($null -eq $Global:AzSubscription){
+            $Global:AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
+            Set-AzContext -Tenant $Global:AzSubscription.Tenant.id -SubscriptionId $Global:AzSubscription.Subscription.id | Out-Null
         }
-        Write-Host ("Using Account ID:   {0} " -f $AzSubscription.Account.Id) -ForegroundColor Green
-        Write-Host ("Using Tenant ID:   {0} " -f $AzSubscription.Tenant.Id) -ForegroundColor Green
-        Write-host ("Using Subscription: {0} " -f $AzSubscription.Subscription.Name) -ForegroundColor Green
+        Write-Host ("Using Account ID:   {0} " -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
+        Write-Host ("Using Tenant ID:   {0} " -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
+        Write-host ("Using Subscription: {0} " -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
     }
 }
 #endregion
@@ -307,7 +307,7 @@ If($HyperVHDxLocation -match 'default')
 # VYOS ISO CHECK
 #============================================
 If(!$NoVyosISOCheck){
-    If($VyosIsoPath -eq '<latest>'){
+    If($VyosIsoPath -match 'latest'){
         $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
         $vyosfilename = (Split-Path $vyossource -Leaf)
         #Assume if set to latest, force download (no prompt)
@@ -339,7 +339,6 @@ If(!$NoVyosISOCheck){
     If( !(Test-Path $destination) )
     {
         If($Null -eq $VyOSResponse){
-            $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
             Write-host ("No iso found in [{0}]" -f $destination) -ForegroundColor Red
             $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
         }
@@ -548,7 +547,7 @@ $AzureSimpleConfig = @{
     VnetSubnetPrefix = $SubnetsFromAzureSiteAHubCIDR[0]
 
     VnetGatewayIpConfigName = $RegionName + '-gateway-ipconfig'
-    VnetGatewayPrefix = ($SubnetsFromAzureSiteAHubCIDR[-1] -replace '/\d+$', '/27')
+    VnetGatewayPrefix = ($SubnetsFromAzureSiteAHubCIDR[-1] -replace '/\d+$', '/26')
 
     TunnelDescription = ('Gateway to ' + $RegionName + ' in Azure').Replace('-',' ')
 
@@ -568,7 +567,7 @@ $AzureSimpleVM = @{
     Name = $RegionName + '-vm1'
     Size = 'Standard_B1ms'
 
-    NICName = $LabPrefix + '-vm1-nic'
+    NICName = $LabPrefix + '-vm1-ni'
 
     VNetName = $AzureSimpleConfig.VnetName
     VnetAddressPrefix = $AzureSimpleConfig.VnetCIDRPrefix
@@ -651,7 +650,7 @@ $AzureVMSiteA = @{
     Skus = '2019-Datacenter'
     Version = 'latest'
 
-    NICName = $RegionAName + '-vm1-nic'
+    NICName = $RegionAName + '-vm1-ni'
 
     VNetName = $AzureAdvConfigSiteA.VnetSpokeName
     VnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
@@ -729,7 +728,7 @@ $AzureVMSiteB = @{
     Skus = '2016-Datacenter'
     Version = 'latest'
 
-    NICName = $RegionBName + '-vm1-nic'
+    NICName = $RegionBName + '-vm1-ni'
 
     VNetName = $AzureAdvConfigSiteB.VnetSpokeName
     VnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix

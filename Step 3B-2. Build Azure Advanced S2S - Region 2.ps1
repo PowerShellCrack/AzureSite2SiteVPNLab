@@ -248,7 +248,8 @@ ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
         Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
         New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteB.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
-                -Location $AzureAdvConfigSiteB.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix @LNGBGPParams -Force | Out-Null
+                -Location $AzureAdvConfigSiteB.LocationName -GatewayIpAddress $HomePublicIP `
+                -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) @LNGBGPParams -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
