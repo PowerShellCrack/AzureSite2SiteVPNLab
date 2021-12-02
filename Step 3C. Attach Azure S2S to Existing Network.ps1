@@ -1,5 +1,7 @@
 Param(
     [string]$Prefix,
+
+    [Parameter(Mandatory = $true)]
     [ArgumentCompleter( {
         param ( $commandName,
                 $parameterName,
@@ -18,6 +20,7 @@ Param(
     [Alias("rg")]
     [string]$ResourceGroup,
 
+    [Parameter(Mandatory = $true)]
     [ArgumentCompleter( {
         param ( $commandName,
                 $parameterName,
@@ -25,20 +28,16 @@ Param(
                 $commandAst,
                 $fakeBoundParameters )
 
-        If($ResourceGroup){
-            $vNets = Get-AzVirtualNetwork -ResourceGroupName $ResourceGroup | Select -ExpandProperty Name
-        }Else{
-            $vNets = Get-AzVirtualNetwork | Select -ExpandProperty Name
-        }
+        $vNets = Get-AzVirtualNetwork | Select -ExpandProperty Name
 
         $vNets | Where-Object {
             $_ -like "$wordToComplete*"
         }
-
     } )]
     [Alias("vNet")]
     [string]$VirtualNetwork,
 
+    [Parameter(Mandatory = $true)]
     [ArgumentCompleter( {
         param ( $commandName,
                 $parameterName,
@@ -46,20 +45,18 @@ Param(
                 $commandAst,
                 $fakeBoundParameters )
 
-        If($ResourceGroup){
-            $pNics = (Get-AzNetworkInterface -ResourceGroupName $ResourceGroup).IpConfigurations.PrivateIpAddress
-        }Else{
-            $pNics = (Get-AzNetworkInterface).IpConfigurations.PrivateIpAddress
-        }
+        $pNics = (Get-AzNetworkInterface).IpConfigurations.PrivateIpAddress
 
         $pNics | Where-Object {
             $_ -like "$wordToComplete*"
         }
 
     } )]
-    [Alias("DNS")]
-    [string]$DNSIP,
+    [Alias("Dns")]
+    [string[]]$DnsIp,
+
     [switch]$RemovePublicIps,
+
     [switch]$Force
 
 )
@@ -97,7 +94,7 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 #endregion
 
 
-$VyOSConfig['InternalDNSIP'] = $DNSIP
+$VyOSConfig['InternalDNSIP'] = $DnsIp
 
 $AzureExistingConfig = @{
 
@@ -546,7 +543,7 @@ delete protocols
 "@
 }
 
-If($DNSIP){
+If($DnsIp){
     $VyOSFinal += @"
 `n
 delete service dns forwarding name-server
@@ -558,7 +555,7 @@ delete service dns forwarding name-server
         $VyOSFinal += @"
 `n
 #Interface $i Configuration
-set service dns forwarding listen-on 'eth$i'
+set service dns forwarding listen-on 'eth$($i)'
 "@
 
         If($VyOSConfig.EnableDHCP){
@@ -568,11 +565,11 @@ set service dns forwarding listen-on 'eth$i'
 delete service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server
 "@
 
-            foreach ($DNS in $DNSIP){
+            foreach ($DNS in $DnsIp){
                 If(Test-IPAddress $DNS){
                     $VyOSFinal += @"
 `n
-set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server $DNS
+set service dhcp-server shared-network-name ETH$($i)_Pool subnet $($SubnetCIDR.Name) dns-server $($DNS)
 "@
                 }
             }#end dns loop
@@ -601,7 +598,7 @@ set service dns forwarding dhcp eth0
 "@
             foreach ($IP in $VyOSConfig.InternalDNSIP){
                 $VyOSFinal += @"
-set service dns forwarding name-server '$IP'
+set service dns forwarding name-server '$($IP)'
 "@
             }
         }#end internal switch option
@@ -612,7 +609,7 @@ set service dns forwarding name-server '$IP'
 #Set internet dns
 `n
 set service dns forwarding name-server '8.8.8.8'
-set service dns forwarding name-server '$NextHop'
+set service dns forwarding name-server '$($NextHop)'
 "@
         } #end internet switch option
     } #end switch
@@ -643,7 +640,7 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureExistingConfig.TunnelDescription)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$VyOSExternalIP'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$($VyOSExternalIP)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-nat-networks 'disable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-public-networks 'disable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 local prefix '$($VyOSConfig.LocalCIDRPrefix)'

@@ -272,8 +272,8 @@ foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Nam
 `n
 #Interface $i Configuration
 set interfaces ethernet eth$i address $($IPInfo.EndingIP)/$($IPInfo.Prefix)
-set interfaces ethernet eth$i description '$Description'
-set service dns forwarding listen-on 'eth$i'
+set interfaces ethernet eth$i description '$($Description)'
+set service dns forwarding listen-on 'eth$($i)'
 "@
 
     If($VyOSConfig.EnableDHCP){
@@ -305,11 +305,11 @@ set service dns forwarding dhcp eth0
 'Internal' {$VyOSLanCmd += @"
 `n
 #Set internal dns
-
 "@
     foreach ($IP in $VyOSConfig.InternalDNSIP){
         $VyOSLanCmd += @"
-set service dns forwarding name-server '$IP'
+`n
+set service dns forwarding name-server '$($IP)'
 "@
                     }
 }
@@ -318,7 +318,7 @@ set service dns forwarding name-server '$IP'
 #Set internet dns
 `n
 set service dns forwarding name-server '8.8.8.8'
-set service dns forwarding name-server '$NextHop'
+set service dns forwarding name-server '$($NextHop)'
 "@
     }
 }
@@ -328,8 +328,8 @@ If($VyOSConfig.EnablePXERelay){
     ForEach($Network in $VyOSNetworks){
         $VyOSLanCmd += @"
 `n
-#Enable DHCP relay (PXE boot) for eth($i):
-set service dhcp-relay interface eth$i
+#Enable DHCP relay (PXE boot) for eth$($i):
+set service dhcp-relay interface eth$($i)
 "@
     $i=$i+1
     }
