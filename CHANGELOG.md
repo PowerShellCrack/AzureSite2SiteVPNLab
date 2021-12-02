@@ -1,6 +1,23 @@
 # Change log for AzureSite2SiteVpnLab
 
+## 1.3.7 - December 2, 2021
 
+- Added additional vyos script commands; added nat protocols for cidr addresses
+- Added RemovePublicIP parameter in Step 3C script; since VPN is place; public IP no longer need to be attached to VMs
+
+## 1.3.6 - December 1, 2021
+
+- Formatted normal output to use white; provides better User expedience if user is using custom powershell colors.
+- Added additional vyos script commands; reset and fixes vpn peers and added static routes
+- Added autocompleter to parameters in Step 3C script; provides Azure values
+
+## 1.3.5 - November 30, 2021
+
+- Change logging names; better output with scripts
+- Add prompt for VM name if found; allows dynamic vm creations
+- Changed hyper-v subnet names to reflex lab prefix; easier management when multiple network exists.
+- Add Hyper-V VM build script; still in Beta
+- Added script for existing networks; provides a means to deploy site-to-site vpn to any existing virtual network in azure.
 
 ## 1.3.4 - November 28, 2021
 
