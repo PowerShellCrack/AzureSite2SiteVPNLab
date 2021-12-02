@@ -31,7 +31,7 @@ Try{
     Write-Host ("Building site-2-site gateway connection to second Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection12) -ForegroundColor White -NoNewline
     New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection12 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg1 `
             -VirtualNetworkGateway1 $gateway1 -VirtualNetworkGateway2 $gateway2 -Location $AzureAdvConfigSiteAtoBConn.loc1 `
-            -ConnectionType Vnet2Vnet -SharedKey $sharedPSKKey -EnableBgp $UseBGP -RoutingWeight 10 | Out-Null
+            -ConnectionType Vnet2Vnet -SharedKey $Global:SharedPskKey -EnableBgp $UseBGP -RoutingWeight 10 | Out-Null
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
@@ -43,7 +43,7 @@ Try{
     Write-Host ("Building site-2-site gateway connection to first Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection21) -ForegroundColor White -NoNewline
     New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection21 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2 `
             -VirtualNetworkGateway1 $gateway2 -VirtualNetworkGateway2 $gateway1 -Location $AzureAdvConfigSiteAtoBConn.loc2 `
-            -ConnectionType Vnet2Vnet -SharedKey $sharedPSKKey -EnableBgp $UseBGP -RoutingWeight 10
+            -ConnectionType Vnet2Vnet -SharedKey $Global:SharedPskKey -EnableBgp $UseBGP -RoutingWeight 10
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{

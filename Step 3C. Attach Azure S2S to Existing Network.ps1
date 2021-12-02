@@ -25,8 +25,11 @@ Param(
                 $commandAst,
                 $fakeBoundParameters )
 
-
-        $vNets = Get-AzVirtualNetwork -ResourceGroupName $ResourceGroup | Select -ExpandProperty Name
+        If($ResourceGroup){
+            $vNets = Get-AzVirtualNetwork -ResourceGroupName $ResourceGroup | Select -ExpandProperty Name
+        }Else{
+            $vNets = Get-AzVirtualNetwork | Select -ExpandProperty Name
+        }
 
         $vNets | Where-Object {
             $_ -like "$wordToComplete*"
@@ -43,17 +46,22 @@ Param(
                 $commandAst,
                 $fakeBoundParameters )
 
+        If($ResourceGroup){
+            $pNics = (Get-AzNetworkInterface -ResourceGroupName $ResourceGroup).IpConfigurations.PrivateIpAddress
+        }Else{
+            $pNics = (Get-AzNetworkInterface).IpConfigurations.PrivateIpAddress
+        }
 
-        $Nics = (Get-AzNetworkInterface -ResourceGroupName $ResourceGroup).IpConfigurations.PrivateIpAddress
-
-        $Nics | Where-Object {
+        $pNics | Where-Object {
             $_ -like "$wordToComplete*"
         }
 
     } )]
     [Alias("DNS")]
     [string]$DNSIP,
+    [switch]$RemovePublicIps,
     [switch]$Force
+
 )
 <#
 #TEST VARIABLES
@@ -83,6 +91,11 @@ Else{
 #if prefix specified, make it lower case else use config's prefix
 If($Prefix){$Prefix = $Prefix.ToLower()}Else{$Prefix = $LabPrefix.ToLower()}
 
+#region start transcript
+$LogfileName = "$Prefix-$ResourceGroup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+#endregion
+
 
 $VyOSConfig['InternalDNSIP'] = $DNSIP
 
@@ -95,10 +108,9 @@ $AzureExistingConfig = @{
     TunnelDescription = ('Gateway to ' + $Prefix + ' in Azure').Replace('-',' ')
 }
 
-#region start transcript
-$LogfileName = "$Prefix-$ResourceGroup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
-Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
-#endregion
+#Make it a global variable so it used for the entire session
+#TEST $Global:BasicPssKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
+If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
 
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
@@ -118,7 +130,7 @@ $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
 If($RG = Get-AzResourceGroup -Name $ResourceGroup -ErrorAction SilentlyContinue)
 {
     $Location = $RG.Location
-    Write-Host ("The Azure resource group [{0}] is in [{1}]..." -f $RG.ResourceGroupName,$Location)
+    Write-Host ("The Azure resource group [{0}] is in [{1}]..." -f $RG.ResourceGroupName,$Location) -ForegroundColor Green
 }
 Else{
     Write-Host ("The specified Azure resource group [{0}] does not exist. You must use an existing Resource Group." -f $ResourceGroup) -ForegroundColor Black -BackgroundColor Red
@@ -130,7 +142,6 @@ Else{
 #append to hashtable
 $AzureExistingConfig['ResourceGroupName'] = $RG.ResourceGroupName
 $AzureExistingConfig['LocationName'] = $RG.Location
-
 
 #region 2. Find Virtual network
 If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue)
@@ -147,7 +158,7 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
             $vNetCidr = $vNet.AddressSpace.AddressPrefixes
             $vNetSubnets = $SubnetConfigs | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
             $GatewaySubnet = $SubnetConfigs | Where Name -eq 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
-            Write-Host ("Found Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+            Write-Host ("Found Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ',')) -ForegroundColor Green
        }
 
        If($vNets.Name -match 'Spoke'){
@@ -158,7 +169,7 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
             $vNetSpokeName = $vNetSpoke.Name
             $vNetSpokeCidr = $vNetSpoke.AddressSpace.AddressPrefixes
             $vNetSpokeSubnets = $vNetSpoke.Subnets.AddressPrefix
-            Write-Host ("Found Spoke Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetSpokeName,($vNetSpokeCidr -join ','),($vNetSpokeSubnets -join ','))
+            Write-Host ("Found Spoke Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetSpokeName,($vNetSpokeCidr -join ','),($vNetSpokeSubnets -join ',')) -ForegroundColor Green
        }
 
        If($vNets.Name -match 'Hub'){
@@ -176,7 +187,7 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
                 $SubnetConfigs = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet -ErrorAction SilentlyContinue | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
             }
             $GatewaySubnet = Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNetHub -ErrorAction SilentlyContinue  | Where Name -eq 'GatewaySubnet'
-            Write-Host ("Found Hub Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+            Write-Host ("Found Hub Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ',')) -ForegroundColor Green
        }
     }
     Else{
@@ -188,7 +199,7 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
         $vNetCidr = $vNet.AddressSpace.AddressPrefixes
         $vNetSubnets = $SubnetConfigs | Where Name -ne 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
         $GatewaySubnet = $SubnetConfigs | Where Name -eq 'GatewaySubnet' | Select -ExpandProperty AddressPrefix
-        Write-Host ("Found single Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ','))
+        Write-Host ("Found single Azure virtual network [{0}] with CIDR [{1}] with subnets [{2}]" -f $vNetName,($vNetCidr -join ','),($vNetSubnets -join ',')) -ForegroundColor Green
     }
 
     $AvailableSubnetsFromVnetCIDR = Get-SimpleSubnets -Cidr $vNetCidr
@@ -404,11 +415,77 @@ Else{
 
 
 #region 9. Create the VPN connection
-$currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
-            -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
+
+if( -Not($currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
+                -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
+{
+    #create the Site-to-Site VPN connection between your virtual network gateway and your VPN device.
+    $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureExistingConfig.VnetGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+    $Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+
+    Write-host ("Create the VPN connection for [{0}]..." -f $AzureExistingConfig.ConnectionName) -ForegroundColor White -NoNewline
+    Try{
+        #Create the connection
+        New-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+            -Location $AzureExistingConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:BasicPssKey -Force | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+
+
+If($RemovePublicIps)
+{
+    #https://docs.microsoft.com/en-us/azure/virtual-network/ip-services/remove-public-ip-address-vm
+    Write-host ("Searching for public IP's attached to network interfaces...") -ForegroundColor White -NoNewline
+    $AllPIPs = Get-AzPublicIpAddress -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+    #be sure to exclude the S2S VPN Public IP
+    $AllPIPs = $AllPIPs | Where Name -ne $AzureExistingConfig.PublicIpName
+    #Find all that are tied to Nics
+    $Nics = Get-AzNetworkInterface -ResourceGroup $AzureExistingConfig.ResourceGroupName
+    $AllPIPs = $AllPIPs | Where {$_.Id -in $Nics.IpConfigurations.PublicIpAddress.Id}
+    Write-host ("Found [{0}]" -f $AllPIPs.count) -ForegroundColor Green
+
+    If($AllPIPs.count -gt 0){
+        #detach public IPs from nics
+        #TEST $nic = $nics[0]
+        Foreach ($nic in $nics){
+            $Attachedpip = $AllPIPs | Where {$_.Id -eq $Nic.IpConfigurations.PublicIpAddress.Id}
+            $nic.IpConfigurations.publicipaddress.id = $null
+            Write-host ("  Detaching public ip [{0}] from network interfaces [{1}]..." -f $Attachedpip.Name,$nic.Name) -ForegroundColor White -NoNewline
+            Try{
+                Set-AzNetworkInterface -NetworkInterface $nic | Out-Null
+                Write-host ("Done") -ForegroundColor Green
+            }
+            Catch{
+                Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                Continue
+            }
+        }
+
+        #remove Public IP resource
+        Foreach ($pip in $AllPIPs){
+            Write-host ("  Deleting public ip [{0}]..." -f $pip.Name) -ForegroundColor Yellow -NoNewline
+            Try{
+                Remove-AzPublicIpAddress -Name $pip.Name -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Force | Out-Null
+                Write-host ("Done") -ForegroundColor Green
+            }
+            Catch{
+                Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                Continue
+            }
+        }
+    }
+}
+
+# Check Connection status
 If($Force){
-    Write-Host ("Force is impletemented. Rebuilding router's VPN settings...") -ForegroundColor Cyan
-    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+    Write-Host ("Force is implemented. Rebuilding router's VPN settings...") -ForegroundColor Cyan
+    $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
                                 -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
     $VyOSConfig['ResetVPNConfigs'] = $true
 }
@@ -425,25 +502,6 @@ ElseIf( ($currentGwConnection).ConnectionStatus -eq "Unknown")
     Write-Host "================================================================" -ForegroundColor Cyan
     Break
 }
-Elseif( $null -eq $currentGwConnection)
-{
-    #create the Site-to-Site VPN connection between your virtual network gateway and your VPN device.
-    $gateway1 = Get-AzVirtualNetworkGateway -Name $AzureExistingConfig.VnetGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
-    $Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
-
-    Write-host ("Create the VPN connection for [{0}]..." -f $AzureExistingConfig.ConnectionName) -ForegroundColor White -NoNewline
-    Try{
-        #Create the connection
-        New-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-            -Location $AzureExistingConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -Force | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-        Break
-    }
-}
 Else{
     Write-Host ("Gateway is not connected! ") -ForegroundColor Red -NoNewline
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
@@ -455,7 +513,7 @@ Else{
     If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+        $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
                                         -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
@@ -579,7 +637,7 @@ set vpn ipsec ike-group azure-ike proposal 1 hash 'sha1'
 set vpn ipsec ipsec-interfaces interface 'eth0'
 set vpn ipsec nat-traversal 'enable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$Global:sharedPSKKey'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:BasicPssKey)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureExistingConfig.TunnelDescription)'
@@ -594,6 +652,19 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($A
 #Default route and blackhole route for BGP and set private ASN number
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
+
+foreach ($vNetPrefix in $vNet.AddressSpace.AddressPrefixes){
+    #use the last octet of network id as the rule id (keeps it unique)
+    [int]$RuleID = ((Get-NetworkDetails -CidrAddress $vNetPrefix).NetworkID -replace '\.0','').split('.')[-1]
+    If( ($RuleID -eq 10) -or ($RuleID -eq 100) ){$RuleID++}
+    $VyOSFinal += @"
+`n
+set nat source rule $($RuleID.ToString()) destination address '$($vNetPrefix)'
+set nat source rule $($RuleID.ToString()) exclude
+set nat source rule $($RuleID.ToString()) outbound-interface 'eth0'
+set nat source rule $($RuleID.ToString()) source address '$($VyOSConfig.LocalCIDRPrefix)'
+"@
+}
 
 If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
@@ -702,7 +773,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($response2 -eq 'Y'){
                 Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
-                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:sharedPSKKey -Force | Out-Null
+                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:BasicPssKey -Force | Out-Null
 
                 Reset-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
                         -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Force | Out-Null
@@ -734,22 +805,23 @@ If($RunManualSteps)
     Write-Host ("Azure Location:      {0}" -f $AzureExistingConfig.LocationName)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureExistingConfig.VnetSubnetPrefix)
-    Write-host ("Shared Key (PSK):    {0}" -f $Global:sharedPSKKey)
+    Write-host ("Shared Key (PSK):    {0}" -f $Global:BasicPssKey)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
-    Write-Host "Be sure to follow a the configuration file: '$PSScriptRoot\Logs\$ScriptName'`n" -ForegroundColor Yellow
 
     #region Copy Paste Mode
-    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSFinal -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
+    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName) by running command [" -ForegroundColor White -NoNewline
+    Write-Host ("ssh vyos@{0}" -f $VyOSExternalIP) -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor White
+    Write-Host "Then copy the script between the lines or `n from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor White
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
-    Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
+    Write-Host "In router's ssh session, run command [" -ForegroundColor Gray -NoNewline
     Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
-    Write-Host "]" -ForegroundColor Gray
+    Write-Host "] to reboot" -ForegroundColor Gray
+    #endregion
 }
 
 Stop-Transcript

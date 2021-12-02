@@ -210,11 +210,6 @@ New-Item "$scriptPath\Logs" -ItemType Directory -ErrorAction SilentlyContinue | 
 # go to whatsmyip.com
 $HomePublicIP = Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
 
-#run if not no variable found in global
-#Make it a global variable so it used for the entire session
-#If(!$Global:sharedPSKKey){$Global:sharedPSKKey = New-SharedPSKey}
-$Global:sharedPSKKey = New-SharedPSKey
-#TEST $Global:sharedPSKKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
 
 #build random character set to ensure no duplication (mainly used for storage accounts)
 #Make it a global variable so it used for the entire session
@@ -274,11 +269,11 @@ If(!$NoAzureCheck){
             $Global:AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
             Set-AzContext -Tenant $Global:AzSubscription.Tenant.id -SubscriptionId $Global:AzSubscription.Subscription.id | Out-Null
         }
-        Write-Host ("Using Account ID:   ") -ForegroundColor White
+        Write-Host ("Using Account ID:   ") -ForegroundColor White -NoNewline
             Write-Host ("{0}" -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
-        Write-Host ("Using Tenant ID:    ") -ForegroundColor White
+        Write-Host ("Using Tenant ID:    ") -ForegroundColor White -NoNewline
             Write-Host ("{0}" -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
-        Write-host ("Using Subscription: ") -ForegroundColor White
+        Write-host ("Using Subscription: ") -ForegroundColor White -NoNewline
             Write-Host ("{0}" -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
     }
 }

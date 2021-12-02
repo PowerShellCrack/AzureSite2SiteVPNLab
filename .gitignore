@@ -7,3 +7,4 @@ configs.example.ps1
 /.vscode/*
 !/.ssh/
 /.ssh/*
+hyperv.ps1

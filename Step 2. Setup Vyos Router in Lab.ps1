@@ -18,6 +18,10 @@
 #>
 #Requires -RunAsAdministrator
 
+Param(
+    [switch]$SkipInitialSetup
+)
+
 #https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
@@ -89,27 +93,28 @@ Else{
 }
 #endregion
 
-#Trunk HyperV Network for internal networks; determine if VLAN needs to be used.
-#https://docs.microsoft.com/en-us/powershell/module/hyper-v/set-vmnetworkadaptervlan?view=windowsserver2019-ps
-If($HyperVConfig.ConfigureForVLAN)
-{
-    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
-        Set-VMNetworkAdapterVlan -Trunk -NativeVlanId $HyperVConfig.VLANID -AllowedVlanIdList $VyOSConfig.AllowedvLanIdRange
-}
-Else{
-    Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
-        Set-VMNetworkAdapterVlan -Untagged
-}
+If(!$SkipInitialSetup){
+    #Trunk HyperV Network for internal networks; determine if VLAN needs to be used.
+    #https://docs.microsoft.com/en-us/powershell/module/hyper-v/set-vmnetworkadaptervlan?view=windowsserver2019-ps
+    If($HyperVConfig.ConfigureForVLAN)
+    {
+        Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
+            Set-VMNetworkAdapterVlan -Trunk -NativeVlanId $HyperVConfig.VLANID -AllowedVlanIdList $VyOSConfig.AllowedvLanIdRange
+    }
+    Else{
+        Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Where-Object {$_.SwitchName -ne $VmSwitchExternal} |
+            Set-VMNetworkAdapterVlan -Untagged
+    }
 
 
-#start VM
-Write-Host "Configuring router for initial settings..." -ForegroundColor Yellow
-If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
-    Start-Sleep 45
-}
+    #start VM
+    Write-Host "Configuring router for initial settings..." -ForegroundColor Yellow
+    If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
+        Start-Sleep 45
+    }
 
-#region INSTALL VyOS
-$VyOSSteps = @"
+    #region INSTALL VyOS
+    $VyOSSteps = @"
 `n
 Installing an image onto the virtual router
 Connect to router and answer the questions below:
@@ -129,22 +134,22 @@ Connect to router and answer the questions below:
   Which drive should GRUB modify the boot partition on? [sda]: [Enter]
 "@
 
-do {
-    #cls
-    Write-Host $VyOSSteps -ForegroundColor Gray
-    Write-Host "`nNOTE: To get out of console, hit [CTRL+ALT+LEFT ARROW]" -ForegroundColor Yellow
-    $response1 = Read-host "Did you complete the steps above? [Y or N]"
-} until ($response1 -eq 'Y')
+    do {
+        #cls
+        Write-Host $VyOSSteps -ForegroundColor Gray
+        Write-Host "`nNOTE: To get out of console, hit [CTRL+ALT+LEFT ARROW]" -ForegroundColor Yellow
+        $response1 = Read-host "Did you complete the steps above? [Y or N]"
+    } until ($response1 -eq 'Y')
 
-Write-Host "`nConfiguring router for next configurations..." -ForegroundColor Yellow
-Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
-Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
-Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-Start-Sleep 45
-#endregion
+    Write-Host "`nConfiguring router for next configurations..." -ForegroundColor Yellow
+    Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
+    Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
+    Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
+    Start-Sleep 45
+    #endregion
 
-#region Setup VyOS SSH
-$VyOSSteps = @"
+    #region Setup VyOS SSH
+    $VyOSSteps = @"
 `n
 Enabling network and SSH on the virtual router
 Connect to router and answer the questions below:
@@ -160,17 +165,22 @@ Connect to router and answer the questions below:
   vyos@vyos:~$ show int
 "@
 
-do {
-    #cls
-    Write-Host $VyOSSteps -ForegroundColor Gray
-    Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
-    Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
-    $response1 = Read-host "Did you complete the steps above? [Y or N]"
-} until ($response1 -eq 'Y')
-Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting VM console" -ForegroundColor Yellow
+    do {
+        #cls
+        Write-Host $VyOSSteps -ForegroundColor Gray
+        Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
+        Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
+        $response1 = Read-host "Did you complete the steps above? [Y or N]"
+    } until ($response1 -eq 'Y')
+    Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting VM console" -ForegroundColor White
 
-#endregion
-
+    #endregion
+}
+Else{
+    Write-Host "Check IP by running command in router [" -ForegroundColor Red -NoNewline
+    Write-Host "show int" -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor Red
+}
 #region Prompt for external interface for router
 do {
     If(Test-Path "$env:temp\VyOSextip.txt"){
@@ -404,15 +414,17 @@ Else{
 
 If($RunManualSteps){
     #region Copy Paste Mode
-    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host $VyOSLanCmd -ForegroundColor Gray
+    Write-Host  $VyOSLanCmd -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
+    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName) by running command [" -ForegroundColor White -NoNewline
+    Write-Host ("ssh vyos@{0}" -f $VyOSExternalIP) -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor White
+    Write-Host "Then copy the script between the lines or `n from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor White
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
-    Write-Host "Run this command last in ssh session: " -ForegroundColor Gray -NoNewline
-    Write-Host "reboot now" -ForegroundColor Yellow
+    Write-Host "In router's ssh session, run command [" -ForegroundColor Gray -NoNewline
+    Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
+    Write-Host "] to reboot" -ForegroundColor Gray
     #endregion
 }
 

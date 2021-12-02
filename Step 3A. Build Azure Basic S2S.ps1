@@ -21,6 +21,10 @@ $LogfileName = "$RegionName-AzureSimpleS2S-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 #endregion
 
+#Make it a global variable so it used for the entire session
+#TEST $Global:BasicPssKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
+If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
+
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
@@ -255,7 +259,7 @@ Elseif( $null -eq $currentGwConnection)
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
             -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $sharedPSKKey -Force | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:BasicPssKey -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -274,7 +278,7 @@ Else{
     If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+        $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
@@ -324,7 +328,7 @@ set vpn ipsec ike-group azure-ike proposal 1 hash 'sha1'
 set vpn ipsec ipsec-interfaces interface 'eth0'
 set vpn ipsec nat-traversal 'enable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$Global:sharedPSKKey'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:BasicPssKey)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureSimpleConfig.TunnelDescription)'
@@ -340,13 +344,6 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($A
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
-If($VyOSConfig.ResetVPNConfigs){
-    $VyOSFinal += @"
-`n
-reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
-"@
-}
-
 foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
     $VyOSFinal += @"
 `n
@@ -354,6 +351,25 @@ set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
 "@
 }
 
+foreach ($vNetPrefix in $vNet.AddressSpace.AddressPrefixes){
+    #use the last octet of network id as the rule id (keeps it unique)
+    $RuleID = ((Get-NetworkDetails -CidrAddress $vNetPrefix).NetworkID -replace '\.0','').split('.')[-1]
+    If( ($RuleID -eq 10) -or ($RuleID -eq 100) ){$RuleID++}
+    $VyOSFinal += @"
+`n
+set nat source rule $($RuleID) destination address '$($vNetPrefix)'
+set nat source rule $($RuleID) exclude
+set nat source rule $($RuleID) outbound-interface 'eth0'
+set nat source rule $($RuleID) source address '$($VyOSConfig.LocalCIDRPrefix)'
+"@
+}
+
+If($VyOSConfig.ResetVPNConfigs){
+    $VyOSFinal += @"
+`n
+reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
+"@
+}
 
 $VyOSFinal += @"
 
@@ -453,7 +469,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($response2 -eq 'Y'){
                 Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName `
-                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:sharedPSKKey -Force | Out-Null
+                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:BasicPssKey -Force | Out-Null
 
                 Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
                         -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Force | Out-Null
@@ -485,22 +501,23 @@ If($RunManualSteps)
     Write-Host ("Azure Location:      {0}" -f $AzureSimpleConfig.LocationName)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureSimpleConfig.VnetSubnetPrefix)
-    Write-host ("Shared Key (PSK):    {0}" -f $Global:sharedPSKKey)
+    Write-host ("Shared Key (PSK):    {0}" -f $Global:BasicPssKey)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
-    Write-Host "Be sure to follow a the configuration file: '$PSScriptRoot\Logs\$ScriptName'`n" -ForegroundColor Yellow
 
     #region Copy Paste Mode
-    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName):`n" -ForegroundColor Yellow
-    Write-Host "Copy script below line or from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host $VyOSFinal -ForegroundColor Gray
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host "Stop copying above line this and paste in ssh session" -ForegroundColor Yellow
+    Write-Host "`nOpen ssh session for $($VyOSConfig.VMName) by running command [" -ForegroundColor White -NoNewline
+    Write-Host ("ssh vyos@{0}" -f $VyOSExternalIP) -ForegroundColor Yellow -NoNewline
+    Write-Host "]" -ForegroundColor White
+    Write-Host "Then copy the script between the lines or `n from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor White
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
-    Write-Host "Log into router and run [" -ForegroundColor Gray -NoNewline
+    Write-Host "In router's ssh session, run command [" -ForegroundColor Gray -NoNewline
     Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
-    Write-Host "]" -ForegroundColor Gray
+    Write-Host "] to reboot" -ForegroundColor Gray
+    #endregion
 }
 
 Stop-Transcript
