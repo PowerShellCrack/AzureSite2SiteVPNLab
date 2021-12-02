@@ -224,22 +224,22 @@ If(!$Global:randomChar){
 #endregion
 
 If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteAHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
 If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteBHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
 If(Test-SameSubnet -Ip1 ($AzureSiteAHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteASpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteAHubCIDR] and [`$AzureSiteASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    Write-Host ("[`$AzureSiteAHubCIDR] and [`$AzureSiteASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
 If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteBSpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Red
+    Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
@@ -274,9 +274,12 @@ If(!$NoAzureCheck){
             $Global:AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
             Set-AzContext -Tenant $Global:AzSubscription.Tenant.id -SubscriptionId $Global:AzSubscription.Subscription.id | Out-Null
         }
-        Write-Host ("Using Account ID:   {0} " -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
-        Write-Host ("Using Tenant ID:   {0} " -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
-        Write-host ("Using Subscription: {0} " -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
+        Write-Host ("Using Account ID:   ") -ForegroundColor White
+            Write-Host ("{0}" -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
+        Write-Host ("Using Tenant ID:    ") -ForegroundColor White
+            Write-Host ("{0}" -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
+        Write-host ("Using Subscription: ") -ForegroundColor White
+            Write-Host ("{0}" -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
     }
 }
 #endregion

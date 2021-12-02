@@ -408,7 +408,8 @@ $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureExistin
             -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
 If($Force){
     Write-Host ("Force is impletemented. Rebuilding router's VPN settings...") -ForegroundColor Cyan
-    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+    $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+                                -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
     $VyOSConfig['ResetVPNConfigs'] = $true
 }
 ElseIf( ($currentGwConnection).ConnectionStatus -eq "Connected")
@@ -454,7 +455,8 @@ Else{
     If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+        $Global:sharedPSKKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+                                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
