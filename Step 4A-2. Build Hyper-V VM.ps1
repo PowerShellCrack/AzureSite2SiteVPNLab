@@ -137,12 +137,12 @@ Write-Host "Done" -ForegroundColor Green
 If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})' -or $VMAdminPassword -match 'password')
 {
     Write-Host ("You must specify a more complex password other than [{0}]" -f $VMAdminPassword) -ForegroundColor Red
-    $response1 = Read-host "Would you like to set a new password? [Y or N]"
-    If($response1 -eq 'Y'){
+    $ChangePassword = Read-host "Would you like to set a new password? [Y or N]"
+    If($ChangePassword -eq 'Y'){
         do {
-            $response2 = Read-host "Whats the new password?"
-        } until ($response2 -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
-        $HyperVSimpleVM['LocalAdminPassword'] = $response2
+            $NewPassword = Read-host "Whats the new password?"
+        } until ($NewPassword -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
+        $HyperVSimpleVM['LocalAdminPassword'] = $NewPassword
     }
     Else{
         Write-Host ("Unable to continue. Change config.ps1 variable [`$VMAdminPassword] value") -ForegroundColor Black -BackgroundColor Red

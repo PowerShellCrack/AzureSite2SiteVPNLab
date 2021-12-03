@@ -504,10 +504,10 @@ Else{
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
         do {
             #cls
-            $response1 = Read-host "Would you like to re-run the router configurations? [Y or N]"
-        } until ($response1 -eq 'Y')
+            $ReconfigureVpn = Read-host "Would you like to re-run the router configurations? [Y or N]"
+        } until ($ReconfigureVpn -eq 'Y')
     }
-    If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
+    If( ($ReconfigureVpn -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
         $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
@@ -727,8 +727,8 @@ If($RouterAutomationMode)
         Write-Host "show vpn ipsec sa" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
         Write-Host "---------------------------------------------"
-        $response1 = Read-host "Is the VPN tunnel up? [Y or N]"
-        If($response1 -eq 'Y'){
+        $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
+        If($IsVpnUp -eq 'Y'){
             Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
             Write-Host "==============================================" -ForegroundColor Green
         }
@@ -767,8 +767,8 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
         Else{
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
-            $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
-            If($response2 -eq 'Y'){
+            $ResetVPN = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
+            If($ResetVPN -eq 'Y'){
                 Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
                         -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:BasicPssKey -Force | Out-Null
 

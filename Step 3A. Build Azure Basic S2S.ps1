@@ -272,10 +272,10 @@ Else{
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
         do {
             #cls
-            $response1 = Read-host "Would you like to re-run the router configurations? [Y or N]"
-        } until ($response1 -eq 'Y')
+            $ReconfigureVpn = Read-host "Would you like to re-run the router configurations? [Y or N]"
+        } until ($ReconfigureVpn -eq 'Y')
     }
-    If( ($response1 -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
+    If( ($ReconfigureVpn -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
         $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName

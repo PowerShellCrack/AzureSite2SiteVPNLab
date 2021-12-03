@@ -138,8 +138,8 @@ Connect to router and answer the questions below:
         #cls
         Write-Host $VyOSSteps -ForegroundColor Gray
         Write-Host "`nNOTE: To get out of console, hit [CTRL+ALT+LEFT ARROW]" -ForegroundColor Yellow
-        $response1 = Read-host "Did you complete the steps above? [Y or N]"
-    } until ($response1 -eq 'Y')
+        $CompleteFirstStep = Read-host "Did you complete the steps above? [Y or N]"
+    } until ($CompleteFirstStep -eq 'Y')
 
     Write-Host "`nConfiguring router for next configurations..." -ForegroundColor Yellow
     Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
@@ -151,7 +151,8 @@ Connect to router and answer the questions below:
     #region Setup VyOS SSH
     $VyOSSteps = @"
 `n
-Enabling network and SSH on the virtual router
+To enable network and SSH on the virtual router
+
 Connect to router and answer the questions below:
 =================================================
   vyos login: vyos
@@ -170,9 +171,9 @@ Connect to router and answer the questions below:
         Write-Host $VyOSSteps -ForegroundColor Gray
         Write-Host "`nMake sure there is an IP address for interface eth0" -ForegroundColor Yellow
         Write-Host "TAKE NOTE OF IP" -BackgroundColor Yellow -ForegroundColor Black
-        $response1 = Read-host "Did you complete the steps above? [Y or N]"
-    } until ($response1 -eq 'Y')
-    Write-Host "If steps completed successfully, You can now ssh into the router instead of connecting VM console" -ForegroundColor White
+        $CompleteSecondStep = Read-host "Did you complete the steps above? [Y or N]"
+    } until ($CompleteSecondStep -eq 'Y')
+    Write-Host "If steps completed successfully, You will be able to ssh into the router instead of connecting VM console" -ForegroundColor White
 
     #endregion
 }
@@ -181,13 +182,14 @@ Else{
     Write-Host "show int" -ForegroundColor Yellow -NoNewline
     Write-Host "]" -ForegroundColor Red
 }
+
 #region Prompt for external interface for router
 do {
     If(Test-Path "$env:temp\VyOSextip.txt"){
         $VyOSExistingIP = Get-Content "$env:temp\VyOSextip.txt"
-        $response1 = Read-host "Is your $($VM.Name) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
+        $IsRightIP = Read-host "Is your $($VM.Name) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
     }
-    If($response1 -eq 'Y'){
+    If($IsRightIP -eq 'Y'){
         $VyOSExternalIP = $VyOSExistingIP
     }Else{
         $VyOSExternalIP = Read-host "What is your $($VM.Name) router's eth0 IP Address? [eg. 192.168.1.2]"
@@ -394,8 +396,8 @@ If($RouterAutomationMode){
 
         Write-Host "Booted" -ForegroundColor Green
         Write-Host "Login to router and run [show int]..." -ForegroundColor Gray
-        $response1 = Read-host "Are all interfaces configured? [Y or N]"
-        If($response1 -eq 'Y'){
+        $LanInterfaces = Read-host "Are all interfaces configured? [Y or N]"
+        If($LanInterfaces -eq 'Y'){
             Write-Host ("Done configuring router interfaces") -ForegroundColor Green
             Write-Host "--------------------------------------------------" -ForegroundColor Green
             $RunManualSteps = $false
