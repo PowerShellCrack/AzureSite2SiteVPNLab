@@ -481,8 +481,8 @@ If($RouterAutomationMode)
         Write-Host "show vpn ipsec sa" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
         Write-Host "---------------------------------------------"
-        $response1 = Read-host "Is the VPN tunnel up? [Y or N]"
-        If($response1 -eq 'Y'){
+        $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
+        If($IsVpnUp -eq 'Y'){
             Write-Host ("Done configuring router advanced site-2-site vpn for region 2") -ForegroundColor Green
             Write-Host "==============================================================" -ForegroundColor Green
         }Else{
@@ -521,8 +521,8 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
         Else{
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
-            $response2 = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
-            If($response2 -eq 'Y'){
+            $ResetVpn = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
+            If($ResetVpn -eq 'Y'){
                 Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteB.ConnectionName `
                         -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Value $Global:RegionBPssKey -Force | Out-Null
 
