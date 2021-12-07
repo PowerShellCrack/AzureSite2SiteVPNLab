@@ -7,4 +7,6 @@ configs.example.ps1
 /.vscode/*
 !/.ssh/
 /.ssh/*
+!/isos/
+/isos/*
 hyperv.ps1

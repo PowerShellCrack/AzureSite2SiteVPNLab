@@ -6,7 +6,7 @@
 # General Configurations - EDIT THIS
 #============================================
 
-$LabPrefix = 'contoso' #identifier for names in lab
+$LabPrefix = 'MECMCBLAB' #identifier for names in lab
 
 $domain = 'lab.contoso.com' #just a name for now (no DC install....yet)
 
@@ -304,6 +304,10 @@ If($HyperVHDxLocation -match 'default')
 #============================================
 # VYOS ISO CHECK
 #============================================
+#build the path to iso in scripts root dir
+[string]$IsosPath = Join-Path -Path $scriptRoot -ChildPath 'isos'
+$vyosIsoSizeMb = 230
+
 If(!$NoVyosISOCheck){
     If($VyosIsoPath -match 'latest'){
         $vyossource = 'https://downloads.vyos.io/rolling/current/amd64/vyos-rolling-latest.iso'
@@ -311,6 +315,9 @@ If(!$NoVyosISOCheck){
         #Assume if set to latest, force download (no prompt)
         $VyOSResponse = 'Y'
         $destination = "$Env:temp\$vyosfilename"
+    }
+    ElseIf( ($VyosIsoPath -match 'default') -and (Test-Path "$IsosPath\vyos-1.1.8-amd64.iso") ){
+        $destination = "$IsosPath\vyos-1.1.8-amd64.iso"
     }
     ElseIf([string]::IsNullOrEmpty($VyosIsoPath) -or ($VyosIsoPath -match 'default') ){
         $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
@@ -362,7 +369,13 @@ If(!$NoVyosISOCheck){
             Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
             break
         }
-    }Else{
+    }
+    ElseIf( ($runningsize = (Get-Item $destination).length/1MB) -lt $vyosIsoSizeMb){
+        Write-host ("The downloaded vyos iso is smaller [{0}Mb] than [{1}Mb]. Please rerun script again..." -f $runningsize,$vyosIsoSizeMb) -BackgroundColor Red
+        Remove-Item $destination -Confirm -Force | Out-null
+        break
+    }
+    Else{
         $VyosIsoPath = $destination
     }
 }

@@ -29,8 +29,8 @@ If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
 }
-ElseIf(Test-Path "$env:temp\VyOSextip.txt"){
-    $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
+ElseIf(Test-Path "$env:temp\$($LabPrefix)-VyOSextip.txt"){
+    $VyOSExternalIP = Get-Content "$env:temp\$($LabPrefix)-VyOSextip.txt"
 }
 Else{
     $VyOSExternalIP = Read-host "Whats the VyOS interface '$($VyOSConfig.ExternalInterface)' IP (eg. '192.168.1.36')"
@@ -428,8 +428,9 @@ If($RouterAutomationMode)
         Write-Host "---------------------------------------------"
         $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
         If($IsVpnUp -eq 'Y'){
-            Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
-            Write-Host "==============================================" -ForegroundColor Green
+            Write-Host "==============================================="  -ForegroundColor Black -BackgroundColor Green
+            Write-Host (" Done configuring router basic site-2-site vpn ") -ForegroundColor Black -BackgroundColor Green
+            Write-Host "==============================================="  -ForegroundColor Black -BackgroundColor Green
         }
         Else{
             Write-Host "Automation may have failed, will attempt to fix..." -ForegroundColor Red

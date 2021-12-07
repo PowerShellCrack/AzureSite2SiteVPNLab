@@ -1,5 +1,12 @@
 # Change log for AzureSite2SiteVpnLab
 
+## 1.3.7 - December 7, 2021
+
+- add vyos siuze check; fixxes issue if download failes or is stopped. Also check local isos folder in root of script
+- Added secondary tunnel to advanced VPN; to connect to both vnets.
+- Fixed vyos prompted issue for external IP; change response variables to be unique
+- added lab name to file name to provide multiple router saves
+
 ## 1.3.7 - December 2, 2021
 
 - Added additional vyos script commands; added nat protocols for cidr addresses

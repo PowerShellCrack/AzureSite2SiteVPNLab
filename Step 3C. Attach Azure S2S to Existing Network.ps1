@@ -113,8 +113,8 @@ If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
 }
-ElseIf(Test-Path "$env:temp\VyOSextip.txt"){
-    $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
+ElseIf(Test-Path "$env:temp\$($LabPrefix)-VyOSextip.txt"){
+    $VyOSExternalIP = Get-Content "$env:temp\$($LabPrefix)-VyOSextip.txt"
 }
 Else{
     $VyOSExternalIP = Read-host "Whats the VyOS interface '$($VyOSConfig.ExternalInterface)' IP (eg. '192.168.1.36')"

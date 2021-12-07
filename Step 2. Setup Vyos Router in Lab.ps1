@@ -53,47 +53,62 @@ If($disk.FreeSpace/1GB -le 2){
 
 #region Create VyOS VM
 $VM = Get-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
-If($null -eq $VM){
-    Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -ForegroundColor White -NoNewline
-    $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
-    Try{
-        If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue ){
-            Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
+If(!$SkipInitialSetup -or !$VM){
+    If($null -eq $VM)
+    {
+        Write-Host ("Creating a VM [{0}]..." -f $VyOSConfig.VMName) -ForegroundColor White -NoNewline
+        $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $VyOSConfig.VMName +'.vhdx')
+        Try{
+            If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue ){
+                Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
+            }
+            New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
         }
-        New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
-    }
-    Catch{
-        Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
-        Break
-    }
+        Catch{
+            Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
 
-    Try{
-        $VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
+        Try{
+            $VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
 
-        New-VM -Name $VyOSConfig.VMName -VHDPath $VHDxFilePath  `
-            -SwitchName $VmSwitchExternal -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop | Out-Null
-        Set-VM -Name $VyOSConfig.VMName -AutomaticCheckpointsEnabled $false -Notes 'StartupOrder: 1' `
-            -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
-            -DynamicMemory -ErrorAction Stop | Out-Null
-        Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
-        #Connect ISO
-        Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
+            New-VM -Name $VyOSConfig.VMName -VHDPath $VHDxFilePath  `
+                -SwitchName $VmSwitchExternal -MemoryStartupBytes 256MB -Generation 1 -ErrorAction Stop | Out-Null
+            Set-VM -Name $VyOSConfig.VMName -AutomaticCheckpointsEnabled $false -Notes 'StartupOrder: 1' `
+                -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
+                -DynamicMemory -ErrorAction Stop | Out-Null
+            Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
+            #Connect ISO
+            Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
 
-        #$VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
-        #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Connect-VMNetworkAdapter -SwitchName $VmSwitchExternal -ErrorAction Stop
+            #$VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
+            #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Connect-VMNetworkAdapter -SwitchName $VmSwitchExternal -ErrorAction Stop
+        }
+        Catch{
+            Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
+        Write-Host "Done" -ForegroundColor Green
     }
-    Catch{
-        Write-Host ("Unable to build the VM: [{0}]. {1}" -f $VyOSConfig.VMName,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
-        Break
+    Else{
+        Write-Host ("VM Already created named [{0}]..." -f $VM.Name) -ForegroundColor Green -NoNewline
+        #always stop VM before attaching iso
+        If($VM.State -eq 'Running'){
+            Write-Host ("in [{0}] State...stopping" -f $VM.State) -ForegroundColor Red
+            Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue -Force
+        }
+        Else{
+            Write-Host ("in [{0}] State" -f $VM.State) -ForegroundColor Green
+        }
+        #always remount ISO if found mounted already
+        If( ($MountedIsoPath = Get-VMDvdDrive -VMName $VyOSConfig.VMName).Path -ne $VyOSConfig.ISOLocation)
+        {
+            Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
+        }
     }
-    Write-Host "Done" -ForegroundColor Green
-}
-Else{
-    Write-Host ("VM Already created named [{0}]." -f $VM.Name) -ForegroundColor Green
-}
-#endregion
+    #endregion
 
-If(!$SkipInitialSetup){
+
     #Trunk HyperV Network for internal networks; determine if VLAN needs to be used.
     #https://docs.microsoft.com/en-us/powershell/module/hyper-v/set-vmnetworkadaptervlan?view=windowsserver2019-ps
     If($HyperVConfig.ConfigureForVLAN)
@@ -106,14 +121,14 @@ If(!$SkipInitialSetup){
             Set-VMNetworkAdapterVlan -Untagged
     }
 
-
     #start VM
-    Write-Host "Configuring router for initial settings..." -ForegroundColor Yellow
+    Write-Host "Configuring router for initial settings, please wait..." -ForegroundColor Yellow
     If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
         Start-Sleep 45
     }
 
     #region INSTALL VyOS
+    Write-Host "↓↓↓ PLEASE FOLLOW THE STEPS BELOW ↓↓↓"  -ForegroundColor Black -BackgroundColor Cyan
     $VyOSSteps = @"
 `n
 Installing an image onto the virtual router
@@ -141,18 +156,20 @@ Connect to router and answer the questions below:
         $CompleteFirstStep = Read-host "Did you complete the steps above? [Y or N]"
     } until ($CompleteFirstStep -eq 'Y')
 
-    Write-Host "`nConfiguring router for next configurations..." -ForegroundColor Yellow
+    Write-Host "`nConfiguring router for next configurations, please wait..." -ForegroundColor Yellow
     Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
+    #always dismount ISO
     Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
+
     Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
     Start-Sleep 45
     #endregion
 
     #region Setup VyOS SSH
+    Write-Host "↓↓↓ PLEASE FOLLOW THE STEPS BELOW ↓↓↓"  -ForegroundColor Black -BackgroundColor Cyan
     $VyOSSteps = @"
 `n
-To enable network and SSH on the virtual router
-
+Enable network and SSH on the virtual router
 Connect to router and answer the questions below:
 =================================================
   vyos login: vyos
@@ -184,9 +201,10 @@ Else{
 }
 
 #region Prompt for external interface for router
+$ping = 0
 do {
-    If(Test-Path "$env:temp\VyOSextip.txt"){
-        $VyOSExistingIP = Get-Content "$env:temp\VyOSextip.txt"
+    If(Test-Path "$env:temp\$($LabPrefix)-VyOSextip.txt"){
+        $VyOSExistingIP = Get-Content "$env:temp\$($LabPrefix)-VyOSextip.txt"
         $IsRightIP = Read-host "Is your $($VM.Name) eth0 IP Address [$VyOSExistingIP]? [Y or N]"
     }
     If($IsRightIP -eq 'Y'){
@@ -194,21 +212,23 @@ do {
     }Else{
         $VyOSExternalIP = Read-host "What is your $($VM.Name) router's eth0 IP Address? [eg. 192.168.1.2]"
     }
-    Remove-Item "$env:temp\VyOSextip.txt" -Force -ErrorAction SilentlyContinue | Out-Null
+    Remove-Item "$env:temp\$($LabPrefix)-VyOSextip.txt" -Force -ErrorAction SilentlyContinue | Out-Null
 
     Write-Host "Testing connection to [$VyOSExternalIP]..." -ForegroundColor Yellow -NoNewline
     Start-Sleep 5
+    $ping++
     $TestIP = Test-Connection $VyOSExternalIP -Count 1 -Quiet
     If (!($TestIP)){
         Write-Host "Failed! Check IP and run command in router [" -ForegroundColor Red -NoNewline
-        Write-Host "show int ethernet eth0 brief" -ForegroundColor Yellow -NoNewline
+        Write-Host "show int ethernet eth0 brief" -ForegroundColor white -NoNewline
         Write-Host "]" -ForegroundColor Red
-    } Else {
+    }
+    Else {
         Write-Host ("interface is pingable") -ForegroundColor Green
         $VyOSConfig.Add('ExternalInterfaceIP',$VyOSExternalIP)
-        $VyOSExternalIP | Out-File "$env:temp\VyOSextip.txt" -Force
+        $VyOSExternalIP | Out-File "$env:temp\$($LabPrefix)-VyOSextip.txt" -Force
     }
-} until ($VyOSExternalIP -as [System.Net.IPAddress] -and $TestIP)
+} until ( ($VyOSExternalIP -as [System.Net.IPAddress] -and $TestIP) -or ($ping -eq 10) )
 #endregion
 
 #region Add all internal networks to router
@@ -376,7 +396,7 @@ If($RouterAutomationMode){
     $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot
 
     #temporary set auto logon ssh keys
-    New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Force -Verbose
+    New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Force -Persistent -Verbose
 
     $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSLanScript.Path -Verbose
 
@@ -395,11 +415,14 @@ If($RouterAutomationMode){
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
         Write-Host "Booted" -ForegroundColor Green
-        Write-Host "Login to router and run [show int]..." -ForegroundColor Gray
+        Write-Host "Log into router and run command [" -ForegroundColor Gray -NoNewline
+        Write-Host "show int" -ForegroundColor Yellow -NoNewline
+        Write-Host "]" -ForegroundColor Gray
         $LanInterfaces = Read-host "Are all interfaces configured? [Y or N]"
         If($LanInterfaces -eq 'Y'){
-            Write-Host ("Done configuring router interfaces") -ForegroundColor Green
-            Write-Host "--------------------------------------------------" -ForegroundColor Green
+            Write-Host "===================================="  -ForegroundColor Black -BackgroundColor Green
+            Write-Host (" Done configuring router interfaces ") -ForegroundColor Black -BackgroundColor Green
+            Write-Host "===================================="  -ForegroundColor Black -BackgroundColor Green
             $RunManualSteps = $false
         }
         Else{

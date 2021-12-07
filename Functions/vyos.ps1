@@ -80,11 +80,30 @@ Function New-SSHSharedKey{
                 #remove both id_rsa and id_rsa.pub file
                 Remove-Item "./.ssh/id_rsa*" -Force -ErrorAction SilentlyContinue | Out-Null
             }
+
+
             #option -y outputs to variable
+            #ssh-keygen.exe -t rsa -b 4096 -N "" -y -f ./.ssh/id_rsa
             #ssh-keygen.exe -t rsa -b 4096 -N "" -f ./.ssh/id_rsa
-            $sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -f ./.ssh/id_rsa' -PassThru -Wait
+            $sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments "-t rsa -b 4096 -N `"`" -f $env:USERPROFILE\.ssh\id_rsa" -PassThru -Wait
             If($sshrsakey.ExitCode -eq 0){Write-Host "INFO: Generated $env:USERPROFILE\.ssh\id_rsa file" -ForegroundColor Cyan;}
             Else{Return $sshrsakey.ExitCode}
+            #$sshrsakey.stderr
+
+            #Ensure permissions are restricted to user only
+            $acl = (Get-Item "$env:USERPROFILE/.ssh").GetAccessControl('Access')
+            $acesToRemove = $acl.Access | ?{ $_.IsInherited -eq $false -and $_.IdentityReference -eq 'Everyone' }
+            If($acesToRemove){$acl.RemoveAccessRuleAll($acesToRemove)}
+            $acl.SetAccessRuleProtection($False,$true)
+            Set-Acl -Path "$env:USERPROFILE/.ssh" -AclObject $acl
+
+            Get-ChildItem "$env:USERPROFILE/.ssh" -Recurse | %{
+                $acl = (Get-Item $_.FullName).GetAccessControl('Access')
+                $acesToRemove = $acl.Access | ?{ $_.IsInherited -eq $false -and $_.IdentityReference -eq 'Everyone' }
+                If($acesToRemove){$acl.RemoveAccessRuleAll($acesToRemove)}
+                $acl.SetAccessRuleProtection($False,$true)
+                Set-Acl -Path $_.FullName -AclObject $acl
+            }
 
             #TEST Get-Content "./.ssh/known_hosts" | Where-Object {$_ -match $IP}
             If(Test-Path "./.ssh/known_hosts"){
@@ -106,9 +125,10 @@ Function New-SSHSharedKey{
                 #Start-ExeProcess scp -Arguments "-o StrictHostKeyChecking no '$id_rsa_Location.pub' '${remoteSSHServerLogin}:/tmp/rsa.pub'" -PassThru -Wait
                 Write-Verbose "scp -o 'StrictHostKeyChecking no' `"$id_rsa_Location.pub`" `"${remoteSSHServerLogin}:/tmp/rsa.pub`""
                 scp -o 'StrictHostKeyChecking no' "$id_rsa_Location.pub" "${remoteSSHServerLogin}:/tmp/rsa.pub"
-                Write-Host "INFO: Updating authorized_keys on $IP..." -NoNewLine
+                Write-Host ("INFO: Updating authorized_keys on [{0}]..." -f $IP)
                 start-sleep 5
-                $bashcmd = "mkdir -p ~/.ssh"
+                $bashcmd = @()
+                $bashcmd += "mkdir -p ~/.ssh"
                 $bashcmd += "chmod 700 ~/.ssh"
                 $bashcmd += "cat /tmp/rsa.pub >> ~/.ssh/authorized_keys"
                 $bashcmd += "chmod 600 ~/.ssh/authorized_keys"
@@ -129,7 +149,9 @@ Function New-SSHSharedKey{
     	}
     	else
     	{
-    		Write-Host "INFO: $env:USERPROFILE\.ssh\id_rsa already exist, reading rsa key..." -ForegroundColor Cyan
+
+
+            Write-Host "INFO: $env:USERPROFILE\.ssh\id_rsa already exist, reading rsa key..." -ForegroundColor Cyan
     		#$sshrsakey = Start-ExeProcess ssh-keygen.exe -Arguments '-t rsa -b 4096 -N "" -y -f ./.ssh/id_rsa' -PassThru -Wait
     		#If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}Else{$sshrsakey.stdout}
             If($sshrsakey.ExitCode -ne 0){Return $sshrsakey.ExitCode}

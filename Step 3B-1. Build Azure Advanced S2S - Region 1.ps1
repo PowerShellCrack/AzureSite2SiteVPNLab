@@ -28,8 +28,8 @@ If(!$Global:RegionAPssKey){$Global:RegionAPssKey = New-SharedPSKey}
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
     $VyOSExternalIP = $VyOSConfig.ExternalInterfaceIP
 }
-ElseIf(Test-Path "$env:temp\VyOSextip.txt"){
-    $VyOSExternalIP = Get-Content "$env:temp\VyOSextip.txt"
+ElseIf(Test-Path "$env:temp\$($LabPrefix)-VyOSextip.txt"){
+    $VyOSExternalIP = Get-Content "$env:temp\$($LabPrefix)-VyOSextip.txt"
 }
 Else{
     $VyOSExternalIP = Read-host "Whats the VyOS interface '$($VyOSConfig.ExternalInterface)' IP (eg. '192.168.1.36')"
@@ -376,11 +376,26 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureAdvConf
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$($VyOSExternalIP)'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-nat-networks 'disable'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-public-networks 'disable'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 local prefix '$($VyOSConfig.LocalCIDRPrefix)'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix)'
+"@
 
+#combine cidr address.
+$AzureCIDRSubnets = @()
+$AzureCIDRSubnets += $AzureAdvConfigSiteA.VnetHubCIDRPrefix
+$AzureCIDRSubnets += $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
+$i = 1
+foreach ($AzureCIDR in $AzureCIDRSubnets){
+    $VyOSFinal += @"
+`n
+set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) allow-nat-networks 'disable'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) allow-public-networks 'disable'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) local prefix '$($VyOSConfig.LocalCIDRPrefix)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) remote prefix '$($AzureCIDR)'
+"@
+    $i++
+}
+
+@"
+`n
 #Default route and blackhole route for BGP and set private ASN number
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
@@ -492,8 +507,9 @@ If($RouterAutomationMode)
         Write-Host "---------------------------------------------"
         $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
         If($IsVpnUp -eq 'Y'){
-            Write-Host ("Done configuring router advanced site-2-site vpn for region 1") -ForegroundColor Green
-            Write-Host "==============================================================" -ForegroundColor Green
+            Write-Host "==============================================================="  -ForegroundColor Black -BackgroundColor Green
+            Write-Host (" Done configuring router advanced site-2-site vpn for region 1 ")  -ForegroundColor Black -BackgroundColor Green
+            Write-Host "==============================================================="  -ForegroundColor Black -BackgroundColor Green
         }Else{
             Write-Host "Automation may have failed, will attempt to fix..." -ForegroundColor Red
             $RunManualSteps = $true

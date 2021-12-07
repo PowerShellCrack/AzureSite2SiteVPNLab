@@ -208,6 +208,7 @@ Function Start-ExeProcess{
         $Executable,
         [Parameter(Mandatory=$false,Position=1)]
         $Arguments,
+		$WorkingDirectory,
         $IgnoreCodes,
         [string[]]$SendKeys,
 	    [switch]$Wait,
@@ -223,7 +224,8 @@ Function Start-ExeProcess{
 
     try{
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.RedirectStandardError = $true
+        If($WorkingDirectory){$pinfo.WorkingDirectory = $WorkingDirectory}
+		$pinfo.RedirectStandardError = $true
         $pinfo.RedirectStandardOutput = $true
         $pinfo.FileName = $Executable
         $pinfo.UseShellExecute = $false
@@ -656,5 +658,3 @@ Function Get-RandomSerialNumber{
     "$(Get-RandomAlphanumericString -length 3)$(Get-random -Minimum 1000000 -Maximum 9999999)$(Get-RandomAlphanumericString -length 2)"
 
 }
-
-
