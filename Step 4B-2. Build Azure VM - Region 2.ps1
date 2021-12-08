@@ -3,7 +3,7 @@ Param(
     [string]$VMName
 )
 $ErrorActionPreference = "Stop"
-#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+#Requires -Modules Az.Accounts,Az.Compute,Az.Resources,Az.Storage,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 #https://docs.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell#create-a-virtual-machine
 #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell
@@ -17,7 +17,7 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
     . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
 }
 #endregion

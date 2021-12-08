@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+#Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 
 #region Grab Configurations
@@ -10,7 +10,7 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
     . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
 }
 #endregion

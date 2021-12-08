@@ -8,9 +8,9 @@
 
 $LabPrefix = 'MECMCBLAB' #identifier for names in lab
 
-$domain = 'lab.contoso.com' #just a name for now (no DC install....yet)
+$domain = 'contoso.com' #just a name for now (no DC install....yet)
 
-$Email = '' #used only in autoshutdown (for now)
+$Email = 'ritracyi@microsoft.com' #used only in autoshutdown (for now)
 
 #this is used to configure default username and password on Azure VM's
 $VMAdminUser = 'xAdmin'
@@ -196,6 +196,8 @@ If($null -eq $scriptRoot){
 . "$FunctionPath\network.ps1"
 #endregion
 
+Write-Host "Processed functions. Loading configuration data..." -ForegroundColor Green
+
 #check if SSH and SCP exist for automation mode to work
 If(-Not(Test-Command ssh) -and -Not(Test-Command scp) -and -Not(Test-Command ssh-keygen) )
 {
@@ -207,9 +209,12 @@ If(-Not(Test-Command ssh) -and -Not(Test-Command scp) -and -Not(Test-Command ssh
 New-Item "$scriptPath\Logs" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 
 # Home network Public IP
-# go to whatsmyip.com
-$HomePublicIP = Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
-
+$HomePublicIP = Get-MyPublicIP
+If(!$HomePublicIP){
+    do {
+        $HomePublicIP = Read-host "Unable to retrieve public ip. What is your public IP?"
+    } until ( $HomePublicIP -as [System.Net.IPAddress])
+}
 
 #build random character set to ensure no duplication (mainly used for storage accounts)
 #Make it a global variable so it used for the entire session
@@ -237,8 +242,6 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
     Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
-
-Write-Host "Processed variables. Loading configuration data..." -ForegroundColor Green
 #============================================
 # AZURE CONNECTION
 #============================================
@@ -415,8 +418,6 @@ $HyperVSimpleVM = @{
     HDDSize=60GB #in gigabytes
 }
 #endregion
-#endregion
-
 
 #region Edge router Configurations
 #---------------------------------

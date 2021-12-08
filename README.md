@@ -115,7 +115,7 @@ There are few options when building the Site2Site VPN lab:
 
 <span style="background-color:Yellow;">**NOTE: If connected to Azure, hit tab for the virtualNetwork and Resourcegroup values to iterate through existing Azure resources. </span>
 ```powershell
-  & '.\Step 3C. Attach Azure Basic S2S to Existing.ps1' -Prefix contoso -ResourceGroup mecmcb-arm-rg -VirtualNetwork contoso-vnet -DNSIP 10.0.0.4 -RemovePublicIps -Force
+  & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix MECMCBLAB -ResourceGroup mecmcb-lab-rg -vNet mecmcblab-vnet -DnsIp 10.0.0.4 -RemovePublicIps -EnableVMAutoShutdown -AttachNsg -Force
 ```
 
 <span style="background-color:Red;">**IMPORTANT**: All scripts list above can be ran multiple times! If ran a second time, it will check all configurations and attempt to repair and issues. this can be useful when public IP has changed on home network</span>

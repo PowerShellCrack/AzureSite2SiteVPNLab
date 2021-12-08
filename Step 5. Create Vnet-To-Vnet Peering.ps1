@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = "Stop"
-#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+#Requires -Modules Az.Accounts,Az.Resources,Az.Storage
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 
 # https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-configure-vnet-connections
@@ -8,12 +8,12 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
-     Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
-     Break
+    Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
+    Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+    Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
     . "$PSScriptRoot\configs.ps1" -NoAzureCheck -NoVyosISOCheck
 }
 #endregion

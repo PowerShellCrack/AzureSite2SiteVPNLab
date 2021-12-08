@@ -375,3 +375,54 @@ Function Get-NextAddress {
     }
     return $c.ToString()
 }
+
+
+Function Get-MyPublicIP{
+    [CmdletBinding()]
+    param (
+        [string]$DynamicDns
+    )
+
+    #hashtable is: "dns name = property"
+    #eg.
+    $RestAPIUrls = @{
+        "http://ipinfo.io/json"='ip'
+        "myexternalip.com/raw"=''
+        "ident.me"=''
+        "api.ipify.org"=''
+        "ipecho.net/plain"=''
+        "ifconfig.me/ip"=''
+    }
+
+    If($DynamicDns)
+    {
+        Try{
+            $Response= Resolve-DnsName -Name $DynamicDns -ErrorAction Stop
+            Return $Response.IpAddress
+        }
+        Catch{
+            Write-Verbose ("{0}" -f $_.Exception.Message)
+        }
+    }
+    Else{
+        Foreach ($URL in $RestAPIUrls.GetEnumerator() )
+        {
+            Write-Verbose ("Invoking {1} on {0}" -f $URL.Name,$URL.Value)
+            Try{
+                $Response = Invoke-RestMethod $URL.Name -ErrorAction Stop
+            }
+            Catch{
+                Write-Verbose ("{0}" -f $_.Exception.Message)
+                Continue
+            }
+
+            If($Response){
+                If($URL.Value){
+                    Return $Response.($URL.Value)
+                }Else{
+                    Return $Response
+                }
+            }
+        }
+    }
+}

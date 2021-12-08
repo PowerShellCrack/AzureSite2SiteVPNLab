@@ -56,7 +56,8 @@ Param(
     [string[]]$DnsIp,
 
     [switch]$RemovePublicIps,
-
+    [switch]$AttachNsg,
+    [switch]$EnableVMAutoShutdown,
     [switch]$Force
 
 )
@@ -68,7 +69,7 @@ $VirtualNetwork='contoso-vnet'
 #>
 
 $ErrorActionPreference = "Stop"
-#Requires -Modules Az.Accounts,Az.Compute,Az.Compute,Az.Resources,Az.Storage
+#Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 
 
@@ -80,7 +81,7 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading configuration file first...") -ForegroundColor Yellow -NoNewline
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
     . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
 }
 #endregion
@@ -205,7 +206,7 @@ If($vNets = Get-AzVirtualNetwork -ResourceGroupName $AzureExistingConfig.Resourc
     $AzureExistingConfig['VnetName'] = $vNetName
     $AzureExistingConfig['VnetGatewayName'] = $Prefix + '-vng'
     $AzureExistingConfig['VnetCIDRPrefix'] = $vNetCidr
-    $AzureExistingConfig['DefaultSubnetName'] = $Prefix + '-default-subnet'
+    $AzureExistingConfig['DefaultSubnetName'] = ($SubnetConfigs | Where Name -ne 'GatewaySubnet').Name
     $AzureExistingConfig['VnetSubnetPrefix'] = $vNetSubnets
     $AzureExistingConfig['VnetGatewayPrefix'] = ($AvailableSubnetsFromVnetCIDR[-1] -replace '/\d+$', '/26')
     $AzureExistingConfig['VnetGatewayIpConfigName'] = $Prefix + '-gateway-ipconfig'
@@ -229,38 +230,23 @@ Catch{
 #endregion
 
 #region 3. Create the VNet
-If(-Not(Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue))
-{
-    Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureExistingConfig.VnetName) -ForegroundColor White -NoNewline
-    Try{
-        New-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-                -Location $AzureExistingConfig.LocationName -AddressPrefix $AzureExistingConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-        Break
-    }
+Write-Host ("Updating Azure virtual network [{0}]..." -f $AzureExistingConfig.VnetName) -ForegroundColor White -NoNewline
+Try{
+    New-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+            -Location $AzureExistingConfig.LocationName -AddressPrefix $AzureExistingConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 -Force | Out-Null
+    Write-Host "Done" -ForegroundColor Green
 }
-Else
-{
-    Write-Host ("Updating Azure virtual network [{0}]..." -f $AzureExistingConfig.VnetName) -ForegroundColor White -NoNewline
-    Try{
-        New-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-                -Location $AzureExistingConfig.LocationName -AddressPrefix $AzureExistingConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 -Force | Out-Null
-        Write-Host "Done" -ForegroundColor Green
-    }
-    Catch{
-        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-        Break
-    }
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
 }
 
 #endregion
+
 #region 4. Attach gateway to vnet
-$vNet = Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+$vNet = Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
 # add gateway prefix if not already exists
-If( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet | Where Name -eq 'GatewaySubnet').AddressPrefix -ne $AzureExistingConfig.VnetGatewayPrefix){
+If( 'GatewaySubnet' -notin (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet).Name){
 
     Write-Host ("Attaching Azure gateway subnet [{0}] to virtual network [{1}]..." -f $AzureExistingConfig.VnetGatewayPrefix,$AzureExistingConfig.VnetName) -ForegroundColor White -NoNewline
     Try{
@@ -478,6 +464,114 @@ If($RemovePublicIps)
         }
     }
 }
+
+
+If($AttachNsg){
+    #region Creating a new NSG to allow PS Remoting Port 5986 and RDP Port 3389
+    #grab Vnet for NSG and NIC configurations
+    $AzureExistingConfig['NSGName'] = ($Prefix + '-nsg')
+
+    If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+        Write-Host ("Creating Azure network security group [{0}]..." -f $AzureExistingConfig.NSGName) -ForegroundColor White -NoNewline
+        Try{
+            New-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
+                            -Location $AzureExistingConfig.LocationName | Out-Null
+
+            $NSG = Get-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
+            #$NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowPort3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
+            #                -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
+
+            #$NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowInternalRDPInbound" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix $VyOSConfig.LocalCIDRPrefix `
+            #                -SourcePortRange * -DestinationAddressPrefix $AzureExistingConfig.VnetSubnetPrefix -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
+
+            $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowMyPublicRDPInbound" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix $HomePublicIP `
+                             -SourcePortRange * -DestinationAddressPrefix $AzureExistingConfig.VnetSubnetPrefix -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
+
+            $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowAllInternalPortsInbound" -Priority 1210 -Protocol * -Access Allow -SourceAddressPrefix $VyOSConfig.LocalCIDRPrefix `
+                            -SourcePortRange * -DestinationAddressPrefix $AzureExistingConfig.VnetSubnetPrefix -DestinationPortRange * -Direction Inbound |
+                            Set-AzNetworkSecurityGroup | Out-Null
+
+            $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowInternalICMPInbound" -Priority 1220 -Protocol ICMP -Access Allow -SourceAddressPrefix $VyOSConfig.LocalCIDRPrefix `
+                            -SourcePortRange * -DestinationAddressPrefix ($AzureExistingConfig.VnetCIDRPrefix -join ',') -DestinationPortRange * -Direction Inbound |
+                            Set-AzNetworkSecurityGroup | Out-Null
+
+            Write-Host "Done" -ForegroundColor Green
+        }
+        Catch{
+            Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
+
+        $vNet = Get-AzVirtualNetwork -Name $AzureExistingConfig.VnetName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
+        $NSG = Get-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
+        Try{
+            Write-Host ("Attaching NSG [{0}] to vNet [{1}] for subnet [{2}]..." -f $NSG.Name,$vNet.name,$AzureExistingConfig.VnetSubnetPrefix) -ForegroundColor White -NoNewline
+            Set-AzVirtualNetworkSubnetConfig -Name $AzureExistingConfig.DefaultSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureExistingConfig.VnetSubnetPrefix `
+                        -NetworkSecurityGroup $NSG | Out-Null
+            # Apply the updated configuration to the subnet configuration and then apply the change to the VNet
+            Set-AzVirtualNetwork -VirtualNetwork $VNet | Out-Null
+            Write-Host "Done" -ForegroundColor Green
+        }
+        Catch{
+            Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
+
+        <#
+        #attach NICs to NSG
+        $Nics = Get-AzNetworkInterface -ResourceGroupName $AzureExistingConfig.ResourceGroupName
+        $NSG = Get-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
+        
+        Foreach ($Nic in $Nics){
+            Try{
+                Write-Host ("Attaching NSG [{0}] to network interface [{1}] ..." -f $AzureExistingConfig.NSGName,$Nic.Name) -ForegroundColor White -NoNewline
+                $Nic.NetworkSecurityGroup = $NSG
+                $Nic | Set-AzNetworkInterface  | Out-Null
+                Write-Host "Done" -ForegroundColor Green
+            }
+            Catch{
+                Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                Break
+            }
+        }
+        #>
+
+    }
+    Else{
+        Write-Host ("Using Azure network security group [{0}]" -f $AzureExistingConfig.NSGName) -ForegroundColor Green
+    }
+    #endregion
+
+
+}
+
+
+#region set autoshutdown (using custom function)
+If($EnableVMAutoShutdown)
+{
+
+    $AzureExistingConfig['AutoShutdownNotificationType'] = 'Email'
+    $AzureExistingConfig['ShutdownTime']=$AzureSimpleVM.ShutdownTime
+    $AzureExistingConfig['ShutdownTimeZone']=$AzureSimpleVM.ShutdownTimeZone
+
+    #determine is notification is by email or webhookurl; set the appropiate param
+    $EmailRegex = '^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$'
+    $URLRegex = '(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)'
+    $ShutdownParam = @{Time=$AzureExistingConfig.ShutdownTime;TimeZone=$AzureExistingConfig.ShutdownTimeZone}
+    If($AzureExistingConfig.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam += @{Email=$AzureExistingConfig.AutoShutdownNotificationType}}
+    If($AzureExistingConfig.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam +=@{WebhookUrl=$AzureExistingConfig.AutoShutdownNotificationType}}
+    Get-AzVm -ResourceGroupName $AzureExistingConfig.ResourceGroupName | %{
+        Try{
+            Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $_.Name) -ForegroundColor White -NoNewline
+            Set-AzVMAutoShutdown -Enable -Name $_.Name -ResourceGroupName $AzureExistingConfig.ResourceGroupName @ShutdownParam | Out-Null
+            Write-Host "Done" -ForegroundColor Green
+        }
+        Catch{
+            Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        }
+    }
+}
+#endregion
 
 # Check Connection status
 If($Force){

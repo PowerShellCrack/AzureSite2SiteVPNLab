@@ -2,10 +2,14 @@
 
 ## 1.3.7 - December 7, 2021
 
-- add vyos siuze check; fixxes issue if download failes or is stopped. Also check local isos folder in root of script
+- add vyos size check; fixes issue if download fails or is stopped. Also check local isos folder in root of script
 - Added secondary tunnel to advanced VPN; to connect to both vnets.
 - Fixed vyos prompted issue for external IP; change response variables to be unique
 - added lab name to file name to provide multiple router saves
+- added function for retrieving public IP; found some networks don't allow ipinfo.io request; loop through multiple urls in attempt to grab public ip
+- Added Autoshutdown enablement to existing network script for VMs
+- Added the ability to Attach an NSG to Vnet in existing networks; secures the vnet to only allow 3389
+- Fixed adding rules and subnet to NSG for existing network; need to update vnet after gateway addition
 
 ## 1.3.7 - December 2, 2021
 
