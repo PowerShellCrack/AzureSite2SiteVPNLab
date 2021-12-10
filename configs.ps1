@@ -6,11 +6,11 @@
 # General Configurations - EDIT THIS
 #============================================
 
-$LabPrefix = 'MECMCBLAB' #identifier for names in lab
+$LabPrefix = 'Contoso' #identifier for names in lab
 
 $domain = 'contoso.com' #just a name for now (no DC install....yet)
 
-$Email = 'ritracyi@microsoft.com' #used only in autoshutdown (for now)
+$Email = '<email>' #used only in VM autoshutdown notification (for now)
 
 #this is used to configure default username and password on Azure VM's
 $VMAdminUser = 'xAdmin'
