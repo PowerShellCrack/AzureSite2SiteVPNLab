@@ -10,7 +10,7 @@ $LabPrefix = 'Contoso' #identifier for names in lab
 
 $domain = 'contoso.com' #just a name for now (no DC install....yet)
 
-$Email = '<email>' #used only in VM autoshutdown notification (for now)
+$Email = '<email>' #used only in VM notification for autoshutdown
 
 #this is used to configure default username and password on Azure VM's
 $VMAdminUser = 'xAdmin'
