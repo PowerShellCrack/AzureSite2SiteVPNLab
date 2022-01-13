@@ -324,7 +324,6 @@ set vpn ipsec ike-group azure-ike lifetime '10800'
 set vpn ipsec ike-group azure-ike proposal 1 dh-group '2'
 set vpn ipsec ike-group azure-ike proposal 1 encryption 'aes256'
 set vpn ipsec ike-group azure-ike proposal 1 hash 'sha1'
-
 set vpn ipsec ipsec-interfaces interface 'eth0'
 set vpn ipsec nat-traversal 'enable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-shared-secret'
@@ -339,17 +338,14 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-nat-networks 
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 allow-public-networks 'disable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 local prefix '$($VyOSConfig.LocalCIDRPrefix)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel 1 remote prefix '$($AzureSimpleConfig.VnetSubnetPrefix)'
+"@
 
 #Default route and blackhole route for BGP and set private ASN number
-set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
-"@
-
-foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
-    $VyOSFinal += @"
+$VyOSFinal += @"
 `n
-set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
+set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
+set protocols static route '$($AzureSimpleConfig.VnetSubnetPrefix)' next-hop '$($azpip.IpAddress)'
 "@
-}
 
 foreach ($vNetPrefix in $vNet.AddressSpace.AddressPrefixes){
     #use the last octet of network id as the rule id (keeps it unique)

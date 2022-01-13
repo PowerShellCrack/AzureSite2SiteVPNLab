@@ -65,7 +65,7 @@ Else{
     $i=1
     do {
         $computername = ($HyperVSimpleVM.ComputerName -replace '\d+$', $i).ToUpper()
-        $newVMname = ($HyperVSimpleVM.Name -replace '\d+$', $i).ToUpper()
+        $newVMname = ($HyperVSimpleVM.ComputerName -replace '\d+$', $i).ToUpper()
         $i++
     } until ($newVMname -notin $VMs.Name)
 }
@@ -73,10 +73,10 @@ Else{
 #Update Names in config
 $HyperVSimpleVM['ComputerName'] = $computername
 If($Autopilot){
-    $HyperVSimpleVM['Name'] = $VMName.ToUpper() + ' (' + $NewSerialNumber + ')'
+    $HyperVSimpleVM['Name'] = $newVMname.ToUpper() + ' (' + $NewSerialNumber + ')'
 }
 Else{
-    $HyperVSimpleVM['Name'] = $VMName.ToUpper()
+    $HyperVSimpleVM['Name'] = $newVMname.ToUpper()
 }
 $VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $newVMname +'.vhdx')
 
@@ -115,7 +115,7 @@ Try{
 
     Remove-VMCheckpoint -VMName $HyperVSimpleVM.Name -ErrorAction SilentlyContinue
     #enable secureboot
-    Set-VMFirmware -VMName $HyperVSimpleVM.Name -EnableSecureBoot
+    Set-VMFirmware -VMName $HyperVSimpleVM.Name -EnableSecureBoot On
     #enable tpm
     Set-VMKeyProtector -VMName $HyperVSimpleVM.Name -NewLocalKeyProtector
     Enable-VMTPM -VMName $HyperVSimpleVM.Name

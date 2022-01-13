@@ -10,7 +10,7 @@ $LabPrefix = 'Contoso' #identifier for names in lab
 
 $domain = 'contoso.com' #just a name for now (no DC install....yet)
 
-$Email = '<email>' #used only in VM notification for autoshutdown
+$Email = '<email>' #used only in VM notification for VM autoshutdown settings
 
 #this is used to configure default username and password on Azure VM's
 $VMAdminUser = 'xAdmin'
@@ -21,18 +21,21 @@ $OnPremSubnetCIDR = '10.120.0.0/16' #Always use /16
 $OnPremSubnetCount = 2
 
 $RegionSiteAId = 'SiteA'
-$AzureSiteAHubCIDR = '10.23.0.0/16' #Always use /16
-$AzureSiteASpokeCIDR = '10.22.0.0/16' #Always use /16
+$AzureSiteAHubCIDR = '10.21.0.0/16' #Always use /16
+$AzureSiteASpokeCIDR = '10.22.0.0/16' #Always use /16; keep this subnet higher than hub (when incrementing)
+$AzureSiteASpokeSubnetCount = 1 #keep this at 1 for now
 
 $RegionSiteBId = 'SiteB'
-$AzureSiteBHubCIDR = '10.33.0.0/16' #Always use /16
+$AzureSiteBHubCIDR = '10.31.0.0/16' #Always use /16
 $AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
+$AzureSiteBSpokeSubnetCount = 1 #keep this at 1 for now
 
-$DHCPLocation = '<ip, server, or router>'   #defaults to dhcp server not on router; assumes dhcp is on a server
-                                            #if <router> is specified, dhcp server will be enabled but a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
+$DHCPLocation = 'router'   #defaults to DHCP server not on router; assumes DHCP is on a server
+#$DHCPLocation = '<IP, server, or router>'   #defaults to DHCP server not on router; assumes DHCP is on a server
+                                            #if <router> is specified, DHCP server will be enabled and a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
 
-$DNSServer = '<ip, ip addresses (comma delimitated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available ip for VM
-                                                                # if <router> is specified; google ip 8.8.8.8 will be used since no dns server exist on router
+$DNSServer = '<IP, IP addresses (comma separated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available IP for VM
+                                                                # if <router> is specified; google IP 8.8.8.8 will be used since no DNS server role exist on router
 
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
 $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
@@ -67,7 +70,7 @@ $RouterAutomationMode = $True
 
 #region FUNCTION: Check if running in ISE
 Function Test-IsISE {
-    # trycatch accounts for:
+    # try catch accounts for:
     # Set-StrictMode -Version latest
     try {
         return ($null -ne $psISE);
@@ -179,7 +182,7 @@ Function Resolve-ActualPath{
 ##* BUILD PATHS
 ##*========================================================================
 #region VARIABLES: Building paths & values
-# Use function to get paths because Powershell ISE & other editors have different results
+# Use function to get paths because PowerShell ISE & other editors have different results
 [string]$scriptPath = Get-ScriptPath
 [string]$scriptFileName = Split-Path -Path $scriptPath -Leaf
 [string]$scriptRoot = Split-Path -Path $scriptPath -Parent
@@ -212,7 +215,7 @@ New-Item "$scriptPath\Logs" -ItemType Directory -ErrorAction SilentlyContinue | 
 $HomePublicIP = Get-MyPublicIP
 If(!$HomePublicIP){
     do {
-        $HomePublicIP = Read-host "Unable to retrieve public ip. What is your public IP?"
+        $HomePublicIP = Read-host "Unable to retrieve public IP. What is your public IP?"
     } until ( $HomePublicIP -as [System.Net.IPAddress])
 }
 
@@ -389,35 +392,15 @@ If(!$NoVyosISOCheck){
 #------------------------------
 $HyperVConfig = @{
     ChangeLocation = $true
-
     VirtualMachineLocation = $HyperVVMLocation
-
     VirtualHardDiskLocation = $HyperVHDxLocation
-
     VirtualSwitchNetworks = @{}
-
     EnableSessionMode = $true
-
     ConfigureForVLAN = $False
-
     VLANID = 21
-
     AllowedvLanIdRange = '1-100'
 }
 
-
-
-
-$HyperVSimpleVM = @{
-    LocalAdminUser = $VMAdminUser
-    LocalAdminPassword = $VMAdminPassword
-    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm2'
-    Name = $RegionName + '-vm2'
-    ISOLocation = $HyperVVmIsoPath
-    Unattended = $true
-    HDDSize=60GB #in gigabytes
-}
-#endregion
 
 #region Edge router Configurations
 #---------------------------------
@@ -450,34 +433,27 @@ $VyOSConfig = @{
     VMName = $LabPrefix.ToUpper() + '-Router'
     ISOLocation = $VyosIsoPath
     TimeZone = 'US/Eastern'
-
     ExternalInterface = 'Default Switch' #CHANGE: Match one of the external network names in hyper config
 
     NextHopSubnet = $NextHop
-
     ResetVPNConfigs = $false # this will delete the configurations of any vpn settings in VyOS
 
     #CIDR for local network
     LocalCIDRPrefix = $OnPremSubnetCIDR
-
     LocalSubnetPrefix = @{}
 
     BgpAsn = 65168 #CHANGE: set as default asn
 
     UseDNSOption = 'Internal' #CHANGE: 'Internal'<--uses VM DNS like a DC; 'External' <--Use home network DNS configs; 'Internet' <-- Uses Google
-
     EnableDHCP = $IsDhcpOnRouter
-
     DhcpRelayIP = $DefaultRelayIp
-
     DHCPPoolsRanges = @{}
-
     EnablePXERelay = $IsDhcpPxeRelayAvailable #True or False: PXE relay may be same a DHCP relay
 
     EnableNAT = $True
 }
 
-#build dns server list
+#build DNS server list
 $VyOSConfig['InternalDNSIP']  = @()
 $DNSServers = @()
 $DNSServers = $DNSServer.split(',')
@@ -505,7 +481,7 @@ Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
     }
 }
 
-#build vyos dhcp pool (even if its not used)
+#build vyos DHCP pool (even if its not used)
 $DHCPPoolTable = $VyOSConfig['DHCPPoolsRanges']
 Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
@@ -532,11 +508,12 @@ Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
 #-----------------------------------------
 $RegionName = ($LabPrefix.Replace(" ",'') + '-Basic').ToLower()
 
-$SubnetsFromAzureSiteASpokeCIDR = Get-SimpleSubnets -Cidr $AzureSiteASpokeCIDR
+$SubnetsFromAzureSiteASpokeCIDR = @()
+$SubnetsFromAzureSiteASpokeCIDR += Get-SimpleSubnets -Cidr $AzureSiteASpokeCIDR -Count $AzureSiteASpokeSubnetCount
 $SubnetsFromAzureSiteAHubCIDR = Get-SimpleSubnets -Cidr $AzureSiteAHubCIDR
 
-
-$SubnetsFromAzureSiteBSpokeCIDR = Get-SimpleSubnets -Cidr $AzureSiteBSpokeCIDR
+$SubnetsFromAzureSiteBSpokeCIDR = @()
+$SubnetsFromAzureSiteBSpokeCIDR += Get-SimpleSubnets -Cidr $AzureSiteBSpokeCIDR -Count $AzureSiteBSpokeSubnetCount
 $SubnetsFromAzureSiteBHubCIDR = Get-SimpleSubnets -Cidr $AzureSiteBHubCIDR
 
 
@@ -585,7 +562,7 @@ $AzureSimpleVM = @{
     VnetAddressPrefix = $AzureSimpleConfig.VnetCIDRPrefix
 
     SubnetName = $AzureSimpleConfig.DefaultSubnetName
-    SubnetAddressPrefix = $AzureSimpleConfig.VnetSubnetPrefix
+    SubnetAddressPrefix = $AzureSimpleConfig.VnetSubnetPrefix[0]
 
     NSGName = $RegionName + '-nsg'
 
@@ -595,6 +572,16 @@ $AzureSimpleVM = @{
     ShutdownTime = '21:00'
 }
 
+$HyperVSimpleVM = @{
+    LocalAdminUser = $VMAdminUser
+    LocalAdminPassword = $VMAdminPassword
+    ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm2'
+    Name = $RegionName + '-vm2'
+    ISOLocation = $HyperVVmIsoPath
+    Unattended = $true
+    HDDSize=60GB #in gigabytes
+}
+#endregion
 
 #============================================
 ## ADVANCED CONFIGURATION
@@ -613,7 +600,7 @@ $AzureAdvConfigSiteA = @{
     VnetSpokeCIDRPrefix = $AzureSiteASpokeCIDR
     VnetSpokeSubnetName = $RegionAName + '-spoke-subnet'
     #VnetSpokeSubnetAddressPrefix = ($AzureSiteASpokeCIDR -replace '/\d+$', '/24')
-    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteASpokeCIDR[0]
+    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteASpokeCIDR
 
     VnetGatewayIpConfigName = $RegionAName + '-gateway-ipconfig'
 
@@ -665,7 +652,7 @@ $AzureVMSiteA = @{
     VnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
 
     SubnetName = $AzureAdvConfigSiteA.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix
+    SubnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix[0]
 
     NSGName = $RegionAName + '-nsg'
 
@@ -692,7 +679,7 @@ $AzureAdvConfigSiteB = @{
     VnetSpokeCIDRPrefix = $AzureSiteBSpokeCIDR
     VnetSpokeSubnetName =  $RegionBName + '-spoke-subnet'
     #VnetSpokeSubnetAddressPrefix = ($AzureSiteBSpokeCIDR -replace '/\d+$', '/24')
-    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteBSpokeCIDR[0]
+    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteBSpokeCIDR
 
     VnetGatewayIpConfigName = $RegionBName + '-gateway-ipconfig'
 
@@ -743,7 +730,7 @@ $AzureVMSiteB = @{
     VnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix
 
     SubnetName = $AzureAdvConfigSiteB.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix
+    SubnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix[0]
 
     NSGName = $RegionBName + '-nsg'
 

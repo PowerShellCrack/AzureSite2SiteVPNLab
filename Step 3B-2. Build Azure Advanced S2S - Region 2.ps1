@@ -105,7 +105,7 @@ If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetSpokeName -
     Write-Host ("Creating Azure spoke virtual network [{0}]..." -f $AzureAdvConfigSiteB.VnetSpokeName) -ForegroundColor White -NoNewline
     Try{
         $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
-                            -Location $AzureAdvConfigSiteB.LocationName -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix
+                            -Location $AzureAdvConfigSiteB.LocationName -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix[0]
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -VirtualNetwork $vNetB `
                 -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix | Out-Null
@@ -399,12 +399,12 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) remote prefix '
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
-foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+foreach ($SubnetRoute in $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix){
     $VyOSFinal += @"
 `n
-set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
+set protocols static route '$($SubnetRoute)' next-hop '$($azpip.IpAddress)'
 "@
-
+}
 If($UseBGP){
     $VyOSFinal += @"
 `n

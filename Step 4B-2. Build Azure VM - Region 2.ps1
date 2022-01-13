@@ -116,7 +116,7 @@ If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceG
         $NSG | Add-AzNetworkSecurityRuleConfig -Name "Allow_Port_3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
                         -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSubnetPrefix `
+        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix[0] `
                     -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue | Out-Null
         $vNet | Set-AzVirtualNetwork -WarningAction SilentlyContinue | Out-Null
         Write-Host "Done" -ForegroundColor Green

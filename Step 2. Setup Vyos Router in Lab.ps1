@@ -77,7 +77,7 @@ If(!$SkipInitialSetup -or !$VM){
             Set-VM -Name $VyOSConfig.VMName -AutomaticCheckpointsEnabled $false -Notes 'StartupOrder: 1' `
                 -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
                 -DynamicMemory -ErrorAction Stop | Out-Null
-            Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
+            #Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
             #Connect ISO
             Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
 
@@ -122,7 +122,7 @@ If(!$SkipInitialSetup -or !$VM){
     }
 
     #start VM
-    Write-Host "Configuring router for initial settings, please wait..." -ForegroundColor Yellow
+    Write-Host "Starting router for initial settings, please wait..." -ForegroundColor Yellow
     If($VM.State -ne "Running"){Start-VM -Name $VyOSConfig.VMName -ErrorAction Stop
         Start-Sleep 45
     }
@@ -144,8 +144,8 @@ Connect to router and answer the questions below:
   How big of a root partition should I create? (1000MB - 2147MB) [2147]MB: [Enter]
   What would you like to name this image? [1.1.8]: [Enter]
   Which one should I copy to sda? [/config/config.boot]: [Enter]
-  Enter password for user 'vyos': [Choose a password]
-  Retype password for user 'vyos': [New password]
+  Enter password for user 'vyos': [Type in a password]
+  Retype password for user 'vyos': [Confirm password]
   Which drive should GRUB modify the boot partition on? [sda]: [Enter]
 "@
 
@@ -156,7 +156,7 @@ Connect to router and answer the questions below:
         $CompleteFirstStep = Read-host "Did you complete the steps above? [Y or N]"
     } until ($CompleteFirstStep -eq 'Y')
 
-    Write-Host "`nConfiguring router for next configurations, please wait..." -ForegroundColor Yellow
+    Write-Host "`nPreparing router for next configurations, please wait..." -ForegroundColor Yellow
     Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
     #always dismount ISO
     Get-VMDvdDrive -VMName $VyOSConfig.VMName | Remove-VMDvdDrive
@@ -173,7 +173,7 @@ Enable network and SSH on the virtual router
 Connect to router and answer the questions below:
 =================================================
   vyos login: vyos
-  Password: [New password]
+  Password: [Your new password]
   vyos@vyos:~$ configure
   vyos@vyos# set interfaces ethernet eth0 address dhcp
   vyos@vyos# set service ssh port 22
@@ -210,9 +210,13 @@ do {
     If($IsRightIP -eq 'Y'){
         $VyOSExternalIP = $VyOSExistingIP
     }Else{
-        $VyOSExternalIP = Read-host "What is your $($VM.Name) router's eth0 IP Address? [eg. 192.168.1.2]"
+        $VyOSExternalIP = Read-host "What is your $($VM.Name)'s eth0 IP Address? [eg. 192.168.1.2]"
     }
+    #remove old recorded IP and CIDR from address (if found)
     Remove-Item "$env:temp\$($LabPrefix)-VyOSextip.txt" -Force -ErrorAction SilentlyContinue | Out-Null
+    If($VyOSExternalIP -match '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'){
+        $VyOSExternalIP = $VyOSExternalIP.replace($Matches[4],'')
+    }
 
     Write-Host "Testing connection to [$VyOSExternalIP]..." -ForegroundColor Yellow -NoNewline
     Start-Sleep 5
@@ -259,7 +263,7 @@ ForEach($Network in $VyOSNetworks)
 
 Start-VM -Name $VyOSConfig.VMName -ErrorAction SilentlyContinue
 #wait for VM to boot completely
-Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+Write-Host "Router is rebooting" -ForegroundColor Yellow -NoNewline
 do {
     Write-Host "." -ForegroundColor White -NoNewline
     Start-Sleep 3
@@ -408,17 +412,19 @@ If($RouterAutomationMode){
     }
     Else{
         #wait for VM to boot completely
-        Write-Host "VM is rebooting" -ForegroundColor Yellow -NoNewline
+        Write-Host "Router is rebooting" -ForegroundColor Yellow -NoNewline
         do {
             Write-Host "." -ForegroundColor Yellow -NoNewline
             Start-Sleep 3
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
         Write-Host "Booted" -ForegroundColor Green
+        Write-Host "------------------------------------------" -ForegroundColor Gray
         Write-Host "Log into router and run command [" -ForegroundColor Gray -NoNewline
         Write-Host "show int" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
-        $LanInterfaces = Read-host "Are all interfaces configured? [Y or N]"
+        Write-Host "------------------------------------------" -ForegroundColor Gray
+        $LanInterfaces = Read-host "Are all interfaces configured with an ip address? [Y or N]"
         If($LanInterfaces -eq 'Y'){
             Write-Host "===================================="  -ForegroundColor Black -BackgroundColor Green
             Write-Host (" Done configuring router interfaces ") -ForegroundColor Black -BackgroundColor Green

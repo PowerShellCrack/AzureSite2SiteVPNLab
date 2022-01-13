@@ -73,6 +73,27 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 }
 #endregion
 
+
+<#
+# Add firewall
+$Bastionsub = New-AzVirtualNetworkSubnetConfig -Name AzureBastionSubnet -AddressPrefix 10.0.0.0/27
+$FWsub = New-AzVirtualNetworkSubnetConfig -Name AzureFirewallSubnet -AddressPrefix 10.0.1.0/26
+$Worksub = New-AzVirtualNetworkSubnetConfig -Name Workload-SN -AddressPrefix 10.0.2.0/24
+
+
+# Add routes to firewall
+$GatewayRouteTable = New-AzRouteTable -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -Name 'gateway-rt'
+Add-AzRouteConfig -Name 'gateway-to-firewall' -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix -RouteTable $GatewayRouteTable `
+            -NextHopType VirtualAppliance -NextHopIpAddress PRIVATE_IP_VM
+
+#
+$SpokeRouteTable = New-AzRouteTable -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -Name 'spoke-rt'
+Add-AzRouteConfig -Name 'spoke-to-firewall' -AddressPrefix 0.0.0.0/0 -RouteTable $SpokeRouteTable -NextHopType VirtualAppliance -NextHopIpAddress PRIVATE_IP_VM
+
+
+#>
+
+
 #region 2. Create virtual network A
 If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
@@ -82,6 +103,25 @@ If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -Re
                             -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix
         #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix | Out-Null
+
+        <#
+        If($AddAzFirewall){
+            $SubnetConfigSplat = @{
+                Name='GatewaySubnet'
+                VirtualNetwork=$vNetA
+                AddressPrefix=$AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
+                RouteTable=$GatewayRouteTable
+            }
+        }
+        Else{
+            $SubnetConfigSplat = @{
+                Name='GatewaySubnet'
+                VirtualNetwork=$vNetA
+                AddressPrefix=$AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix
+            }
+        }
+        #>
+        #Add-AzVirtualNetworkSubnetConfig @SubnetConfigSplat | Out-Null
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -99,13 +139,26 @@ Else{
 #endregion
 
 
+<#
+# Add Bastion host
+$vNet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
+$publicip = New-AzPublicIpAddress -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName `
+                    -Name bastion-pip -AllocationMethod static -Sku standard
+
+New-AzBastion -ResourceGroupName Test-FW-RG -Name Bastion-01 -PublicIpAddress $publicip -VirtualNetwork $vNet
+
+#>
+
+
 #region 3. Create virtual network B
+#TODO
+#build subnet loop to incorporate multiple subnets
 If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
     Write-Host ("Creating Azure spoke virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -ForegroundColor White -NoNewline
     Try{
         $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-                            -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
+                            -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix[0]
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
                 -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix | Out-Null
@@ -394,16 +447,16 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) remote prefix '
     $i++
 }
 
-@"
-`n
 #Default route and blackhole route for BGP and set private ASN number
+$VyOSFinal += @"
+`n
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
-foreach ($SubnetCIDR in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name){
+foreach ($SubnetRoute in $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix){
     $VyOSFinal += @"
 `n
-set protocols static route '$($SubnetCIDR.Name)' next-hop '$($azpip.IpAddress)'
+set protocols static route '$($SubnetRoute)' next-hop '$($azpip.IpAddress)'
 "@
 }
 

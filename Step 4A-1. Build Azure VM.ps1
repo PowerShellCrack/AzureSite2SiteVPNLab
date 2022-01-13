@@ -87,10 +87,10 @@ If(-Not(Get-AzResourceGroup -Name $AzureSimpleConfig.ResourceGroupName -ErrorAct
 
 If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
             -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureSimpleConfig.StorageSku} | Select -First 1)){
-    Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -ForegroundColor White -NoNewline
     Try{
         $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
         $storageName = ($RegionName +'-' + $randomChar).ToLower() -replace '[\W]', ''
+        Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -ForegroundColor White -NoNewline
 
         $StorageAccount = New-AzStorageAccount -Name $storageName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -SkuName $AzureSimpleConfig.StorageSku `
                             -Location $AzureSimpleConfig.LocationName -Kind Storage | Out-Null
