@@ -5,6 +5,7 @@
 - fixed static routes on VyOS; was using local subnets and changed to azure subnets
 - adding ability for multiple spoke subnets
 - updated readme; added concept image and known issues
+- separated function into different files; organized Hyper-V and Azure scripts
 ## 1.3.7 - December 7, 2021
 
 - add VyOS size check; fixes issue if download fails or is stopped. Also check local ISOs folder in root of script

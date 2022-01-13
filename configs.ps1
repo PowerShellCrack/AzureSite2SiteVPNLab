@@ -197,6 +197,8 @@ If($null -eq $scriptRoot){
 . "$FunctionPath\library.ps1"
 . "$FunctionPath\vyos.ps1"
 . "$FunctionPath\network.ps1"
+. "$FunctionPath\hyperv.ps1"
+. "$FunctionPath\azure.ps1"
 #endregion
 
 Write-Host "Processed functions. Loading configuration data..." -ForegroundColor Green

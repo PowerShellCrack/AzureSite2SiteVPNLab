@@ -70,9 +70,10 @@ $RouterAutomationMode = $True
 
 ```
 
-- **library.ps1** <-- Custom functions used for Azure automation
+- **library.ps1** <-- Custom functions used for common automation
 - **network.ps1** <-- Custom functions used to generating network subnets
 - **VyOS.ps1** <-- Custom functions used for VyOS automation
+- **azure.ps1** <-- Custom functions used for Azure automation
 - **hyperv.ps1** (not used) <-- developing for hyper-v VM automation
 
 **NOTE**: All logs are written using a transcript to the logs folder including VyOS scripts
