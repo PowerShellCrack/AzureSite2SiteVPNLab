@@ -10,6 +10,7 @@
   - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://s3.amazonaws.com/s3-us.VyOS.io/VyOS-1.1.8-amd64.iso). The script will auto download it
 - Partial knowledge with PowerShell
 - SSH utility with SCP and SSH-Keygen. These are installed with Git for Windows. You can get it [**here**](https://git-scm.com/downloads)
+- Azure PowerShell Modules installed (specifically  **Az.Accounts, Az.Resources ,Az.Network, Az.Storage, Az.Compute**)
 
 ## Scripts
 
