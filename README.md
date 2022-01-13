@@ -1,7 +1,7 @@
 # Hybrid Lab Setup using Hyper-V and Azure Site-2-Site VPN
 
 
-![Concept](.images\concept.png)
+![Concept](/.images/concept.png)
 ## Prereqs
 
 - 1 or 2 Azure subscriptions (VSE or Trial will work)
