@@ -40,7 +40,7 @@ $DNSServer = '<IP, IP addresses (comma separated), router>'   #if not specified;
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
 $HyperVHDxLocation = '<default>' #Leave as <default> for auto detect
 
-$VyosIsoPath = '<default>' #Add path (eg. 'E:\ISOs\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest vyos ISO (this is still in BETA)
+$VyosIsoPath = '<default>' #Add path (eg. 'E:\ISOs\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest VyOS ISO (this is still in BETA)
                   #If path left blank or default, it will attempt to download the supported versions (1.1.8)
 
 $HyperVVmIsoPath = 'E:\ISOs\en-us_windows_10_business_editions_version_20h2_updated_october_2021_x64_dvd_e057173c.iso'
@@ -56,7 +56,7 @@ $AzureVnetToVnetPeering = @{
     SiteBTenantID = '<TenantBID>'
 }
 
-#Uses Git, SSH and SCP to build vyos router
+#Uses Git, SSH and SCP to build VyOS router
 # 99% automated; but 90% successful
 $RouterAutomationMode = $True
 
@@ -351,7 +351,7 @@ If(!$NoVyosISOCheck){
     {
         If($Null -eq $VyOSResponse){
             Write-host ("No iso found in [{0}]" -f $destination) -ForegroundColor Red
-            $VyOSResponse = Read-host "Would you like to attempt to download the Vyos router ISO? [Y or N]"
+            $VyOSResponse = Read-host "Would you like to attempt to download the VyOS router ISO? [Y or N]"
         }
 
         If($VyOSResponse -eq 'Y')
@@ -372,12 +372,12 @@ If(!$NoVyosISOCheck){
             }
         }
         Else{
-            Write-host ("You must download the vyos iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
+            Write-host ("You must download the VyOS iso from [{0}] before continuing!" -f $vyossource) -ForegroundColor Black -BackgroundColor Red
             break
         }
     }
     ElseIf( ($runningsize = (Get-Item $destination).length/1MB) -lt $vyosIsoSizeMb){
-        Write-host ("The downloaded vyos iso is smaller [{0}Mb] than [{1}Mb]. Please rerun script again..." -f $runningsize,$vyosIsoSizeMb) -BackgroundColor Red
+        Write-host ("The downloaded VyOS iso is smaller [{0}Mb] than [{1}Mb]. Please rerun script again..." -f $runningsize,$vyosIsoSizeMb) -BackgroundColor Red
         Remove-Item $destination -Confirm -Force | Out-null
         break
     }
@@ -436,13 +436,13 @@ $VyOSConfig = @{
     ExternalInterface = 'Default Switch' #CHANGE: Match one of the external network names in hyper config
 
     NextHopSubnet = $NextHop
-    ResetVPNConfigs = $false # this will delete the configurations of any vpn settings in VyOS
+    ResetVPNConfigs = $false # this will delete the configurations of any VPN settings in VyOS
 
     #CIDR for local network
     LocalCIDRPrefix = $OnPremSubnetCIDR
     LocalSubnetPrefix = @{}
 
-    BgpAsn = 65168 #CHANGE: set as default asn
+    BgpAsn = 65168 #CHANGE: set as default ASN
 
     UseDNSOption = 'Internal' #CHANGE: 'Internal'<--uses VM DNS like a DC; 'External' <--Use home network DNS configs; 'Internet' <-- Uses Google
     EnableDHCP = $IsDhcpOnRouter
@@ -471,7 +471,7 @@ If($VyOSConfig['InternalDNSIP'].count -eq 0){
     }
 }
 
-#build vyos local subnet and description
+#build VyOS local subnet and description
 $SubnetTable = $VyOSConfig['LocalSubnetPrefix']
 Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
@@ -481,7 +481,7 @@ Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
     }
 }
 
-#build vyos DHCP pool (even if its not used)
+#build VyOS DHCP pool (even if its not used)
 $DHCPPoolTable = $VyOSConfig['DHCPPoolsRanges']
 Foreach ($Subnet in $SimpleSubnetsFromOnPremCIDR)
 {
