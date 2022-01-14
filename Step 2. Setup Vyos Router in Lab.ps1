@@ -426,9 +426,9 @@ If($RouterAutomationMode){
         Write-Host "------------------------------------------" -ForegroundColor Gray
         $LanInterfaces = Read-host "Are all interfaces configured with an ip address? [Y or N]"
         If($LanInterfaces -eq 'Y'){
-            Write-Host "===================================="  -ForegroundColor Black -BackgroundColor Green
-            Write-Host (" Done configuring router interfaces ") -ForegroundColor Black -BackgroundColor Green
-            Write-Host "===================================="  -ForegroundColor Black -BackgroundColor Green
+            Write-Host "====================================" -ForegroundColor Black -BackgroundColor Green
+            Write-Host " Done configuring router interfaces " -ForegroundColor Black -BackgroundColor Green
+            Write-Host "====================================" -ForegroundColor Black -BackgroundColor Green
             $RunManualSteps = $false
         }
         Else{

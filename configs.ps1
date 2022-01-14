@@ -1,4 +1,5 @@
-﻿Param(
+﻿[CmdletBinding()]
+Param(
     [switch]$NoAzureCheck,
     [switch]$NoVyosISOCheck
 )
@@ -60,6 +61,8 @@ $AzureVnetToVnetPeering = @{
 # 99% automated; but 90% successful
 $RouterAutomationMode = $True
 
+#Name appended to the simple S2S resources
+$SimpleAppendix = 'Simple'
 #============================================
 # General Configurations - STOP HERE
 #============================================
@@ -508,7 +511,7 @@ Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
 #============================================
 #region Azure Network Configurations
 #-----------------------------------------
-$RegionName = ($LabPrefix.Replace(" ",'') + '-Basic').ToLower()
+$RegionName = ($LabPrefix.Replace(" ",'') + '-' + $SimpleAppendix).Trim('-').ToLower()
 
 $SubnetsFromAzureSiteASpokeCIDR = @()
 $SubnetsFromAzureSiteASpokeCIDR += Get-SimpleSubnets -Cidr $AzureSiteASpokeCIDR -Count $AzureSiteASpokeSubnetCount

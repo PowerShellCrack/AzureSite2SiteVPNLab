@@ -107,8 +107,8 @@ $AzureExistingConfig = @{
 }
 
 #Make it a global variable so it used for the entire session
-#TEST $Global:BasicPssKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
-If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
+#TEST $Global:SharedPSK='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
+If(!$Global:SharedPSK){$Global:SharedPSK = New-SharedPSKey}
 
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
@@ -411,7 +411,7 @@ if( -Not($currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $Azu
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
             -Location $AzureExistingConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:BasicPssKey -Force | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:SharedPSK -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -521,7 +521,7 @@ If($AttachNsg){
         #attach NICs to NSG
         $Nics = Get-AzNetworkInterface -ResourceGroupName $AzureExistingConfig.ResourceGroupName
         $NSG = Get-AzNetworkSecurityGroup -Name $AzureExistingConfig.NSGName -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
-        
+
         Foreach ($Nic in $Nics){
             Try{
                 Write-Host ("Attaching NSG [{0}] to network interface [{1}] ..." -f $AzureExistingConfig.NSGName,$Nic.Name) -ForegroundColor White -NoNewline
@@ -576,7 +576,7 @@ If($EnableVMAutoShutdown)
 # Check Connection status
 If($Force){
     Write-Host ("Force is implemented. Rebuilding router's VPN settings...") -ForegroundColor Cyan
-    $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+    $Global:SharedPSK = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
                                 -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
     $VyOSConfig['ResetVPNConfigs'] = $true
 }
@@ -604,7 +604,7 @@ Else{
     If( ($ReconfigureVpn -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
+        $Global:SharedPSK = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
                                         -ResourceGroupName $AzureExistingConfig.ResourceGroupName -ErrorAction SilentlyContinue
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
@@ -728,7 +728,7 @@ set vpn ipsec ike-group azure-ike proposal 1 hash 'sha1'
 set vpn ipsec ipsec-interfaces interface 'eth0'
 set vpn ipsec nat-traversal 'enable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:BasicPssKey)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:SharedPSK)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureExistingConfig.TunnelDescription)'
@@ -823,8 +823,9 @@ If($RouterAutomationMode)
         Write-Host "---------------------------------------------"
         $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
         If($IsVpnUp -eq 'Y'){
-            Write-Host ("Done configuring router basic site-2-site vpn") -ForegroundColor Green
-            Write-Host "==============================================" -ForegroundColor Green
+            Write-Host "=========================================" -ForegroundColor Green
+            Write-Host " Done configuring router site-2-site vpn " -ForegroundColor Green
+            Write-Host "=========================================" -ForegroundColor Green
         }
         Else{
             Write-Host "Automation may have failed, will attempt to fix..." -ForegroundColor Red
@@ -864,7 +865,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             $ResetVPN = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($ResetVPN -eq 'Y'){
                 Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureExistingConfig.ConnectionName `
-                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:BasicPssKey -Force | Out-Null
+                        -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Value $Global:SharedPSK -Force | Out-Null
 
                 Reset-AzVirtualNetworkGatewayConnection -Name $AzureExistingConfig.ConnectionName `
                         -ResourceGroupName $AzureExistingConfig.ResourceGroupName -Force | Out-Null
@@ -896,7 +897,7 @@ If($RunManualSteps)
     Write-Host ("Azure Location:      {0}" -f $AzureExistingConfig.LocationName)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureExistingConfig.VnetSubnetPrefix)
-    Write-host ("Shared Key (PSK):    {0}" -f $Global:BasicPssKey)
+    Write-host ("Shared Key (PSK):    {0}" -f $Global:SharedPSK)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
 
@@ -914,5 +915,6 @@ If($RunManualSteps)
     Write-Host "] to reboot" -ForegroundColor Gray
     #endregion
 }
+
 
 Stop-Transcript

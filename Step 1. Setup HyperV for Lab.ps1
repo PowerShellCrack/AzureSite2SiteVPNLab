@@ -89,6 +89,7 @@ Foreach($Subnet in $HyperVConfig.VirtualSwitchNetworks.GetEnumerator() | Sort Na
     $i++
 }
 
-Write-Host ("Done configuring Hyper-V") -ForegroundColor Green
-Write-Host "--------------------------------------------------" -ForegroundColor Green
+Write-Host "==========================" -ForegroundColor Black -BackgroundColor Green
+Write-Host " Done configuring Hyper-V " -ForegroundColor Black -BackgroundColor Green
+Write-Host "==========================" -ForegroundColor Black -BackgroundColor Green
 Stop-Transcript

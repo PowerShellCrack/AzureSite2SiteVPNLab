@@ -1,5 +1,13 @@
 # Change log for AzureSite2SiteVPNLab
 
+## 1.3.9 - January 13, 2022
+
+- check vNet for subnets; ensure vNet has required subnets added if vNet is already provisioned
+- Changed concept image; highlighted areas the scripts perform
+- Change global variable for sharedkey; to clarify which keys are set
+- Added variable for simple network appendix; allows more customization
+- Updated transaction log output
+
 ## 1.3.8 - January 12, 2022
 
 - fixed static routes on VyOS; was using local subnets and changed to azure subnets

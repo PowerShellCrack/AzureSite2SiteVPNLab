@@ -18,6 +18,11 @@ Else{
 }
 #endregion
 
+#start transcript
+$LogfileName = "VnetToVnet-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+#endregion
+
 # connect to first tenant to setup vNET peering
 If( ($AzureVnetToVnetPeering.SiteATenantID -notmatch 'TenantAID') -and ($AzureVnetToVnetPeering.SiteASubscriptionID -notmatch 'SubscriptionAID') ){
   Connect-AzAccount -Tenant $AzureVnetToVnetPeering.SiteATenantID
@@ -68,3 +73,8 @@ Catch{
 Finally{
   Clear-AzDefault
 }
+
+Write-Host "======================================" -ForegroundColor Black -BackgroundColor Green
+Write-Host " Done connecting region 1 to region 2 " -ForegroundColor Black -BackgroundColor Green
+Write-Host "======================================" -ForegroundColor Black -BackgroundColor Green
+Stop-Transcript

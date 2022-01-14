@@ -22,8 +22,8 @@ Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{S
 #endregion
 
 #Make it a global variable so it used for the entire session
-#TEST $Global:BasicPssKey='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
-If(!$Global:BasicPssKey){$Global:BasicPssKey = New-SharedPSKey}
+#TEST $Global:SharedPSK='bB8u6Tj60uJL2RKYR0OCyiGMdds9gaEUs9Q2d3bRTTVRKJ516CCc1LeSMChAI0rc'
+If(!$Global:SharedPSK){$Global:SharedPSK = New-SharedPSKey}
 
 #grab external interface for VyOS router
 If($null -ne $VyOSConfig.ExternalInterfaceIP){
@@ -70,12 +70,26 @@ Catch{
 #endregion
 
 #region 3. Create the VNet
-If(-Not(Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
+If(-Not($vNet = Get-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue))
 {
+
     Write-Host ("Creating Azure virtual network [{0}]..." -f $AzureSimpleConfig.VnetName) -ForegroundColor White -NoNewline
     Try{
         New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
                 -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 | Out-Null
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+
+}
+ElseIf( (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $vNet).count -lt 2){
+    Write-Host ("vNET is missing subnets. Recreating Azure virtual network [{0}]..." -f $AzureSimpleConfig.VnetName) -ForegroundColor Yellow -NoNewline
+    Try{
+        New-AzVirtualNetwork -Name $AzureSimpleConfig.VnetName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
+                -Location $AzureSimpleConfig.LocationName -AddressPrefix $AzureSimpleConfig.VnetCIDRPrefix -Subnet $subnet1, $subnet2 -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -259,7 +273,7 @@ Elseif( $null -eq $currentGwConnection)
         #Create the connection
         New-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
             -Location $AzureSimpleConfig.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:BasicPssKey -Force | Out-Null
+            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:SharedPSK -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -270,15 +284,13 @@ Elseif( $null -eq $currentGwConnection)
 Else{
     Write-Host ("Gateway is not connected! ") -ForegroundColor Red -NoNewline
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
-        do {
-            #cls
-            $ReconfigureVpn = Read-host "Would you like to re-run the router configurations? [Y or N]"
-        } until ($ReconfigureVpn -eq 'Y')
+        $ReconfigureVpn = Read-host "Would you like to re-run the router configurations? [Y or N]"
     }
+
     If( ($ReconfigureVpn -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
     {
         Write-Host ("Attempting to update vyos router vpn configurations to use Azure's public IP [{0}]..." -f $azpip.IpAddress) -ForegroundColor Yellow
-        $Global:BasicPssKey = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+        $Global:SharedPSK = Get-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
@@ -327,7 +339,7 @@ set vpn ipsec ike-group azure-ike proposal 1 hash 'sha1'
 set vpn ipsec ipsec-interfaces interface 'eth0'
 set vpn ipsec nat-traversal 'enable'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:BasicPssKey)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:SharedPSK)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureSimpleConfig.TunnelDescription)'
@@ -424,9 +436,9 @@ If($RouterAutomationMode)
         Write-Host "---------------------------------------------"
         $IsVpnUp = Read-host "Is the VPN tunnel up? [Y or N]"
         If($IsVpnUp -eq 'Y'){
-            Write-Host "==============================================="  -ForegroundColor Black -BackgroundColor Green
-            Write-Host (" Done configuring router basic site-2-site vpn ") -ForegroundColor Black -BackgroundColor Green
-            Write-Host "==============================================="  -ForegroundColor Black -BackgroundColor Green
+            Write-Host "=========================================" -ForegroundColor Black -BackgroundColor Green
+            Write-Host " Done configuring router site-2-site vpn " -ForegroundColor Black -BackgroundColor Green
+            Write-Host "=========================================" -ForegroundColor Black -BackgroundColor Green
         }
         Else{
             Write-Host "Automation may have failed, will attempt to fix..." -ForegroundColor Red
@@ -465,12 +477,23 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
             $ResetVpn = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
             If($ResetVpn -eq 'Y'){
-                Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName `
-                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:BasicPssKey -Force | Out-Null
+                Write-Host ("Resetting VPN's shared key for connection [{0}]..." -f $AzureSimpleConfig.ConnectionName) -ForegroundColor White -NoNewline
+                Try{
+                    Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureSimpleConfig.ConnectionName `
+                            -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Value $Global:SharedPSK -Force | Out-Null
 
-                Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
-                        -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Force | Out-Null
-                Start-Sleep 10
+                    Reset-AzVirtualNetworkGatewayConnection -Name $AzureSimpleConfig.ConnectionName `
+                            -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Force | Out-Null
+
+                    Write-Host "Done" -ForegroundColor Green
+                }
+                Catch{
+                    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                    Break
+                }
+                Finally{
+                    Start-Sleep 10
+                }
                 $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject
                 #TEST $VyOSFinalScript.value
                 New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
@@ -498,7 +521,7 @@ If($RunManualSteps)
     Write-Host ("Azure Location:      {0}" -f $AzureSimpleConfig.LocationName)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureSimpleConfig.VnetSubnetPrefix)
-    Write-host ("Shared Key (PSK):    {0}" -f $Global:BasicPssKey)
+    Write-host ("Shared Key (PSK):    {0}" -f $Global:SharedPSK)
     Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
 
