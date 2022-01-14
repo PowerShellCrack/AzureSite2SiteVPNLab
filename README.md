@@ -8,9 +8,10 @@
 - Windows OS that will support Hyper-V (UEFI or TPM not needed)
 - Router with S2S IPSEC VPN capabilities __OR__ VyOS Router
   - This lab uses a virtual router called VyOS. The ISO can be found [**here**](https://s3.amazonaws.com/s3-us.VyOS.io/VyOS-1.1.8-amd64.iso). The script will auto download it
-- Partial knowledge with PowerShell
+- Home router is issuing IP (DHCP)
 - SSH utility with SCP and SSH-Keygen. These are installed with Git for Windows. You can get it [**here**](https://git-scm.com/downloads)
 - Azure PowerShell Modules installed (specifically  **Az.Accounts, Az.Resources ,Az.Network, Az.Storage, Az.Compute**)
+- Partial knowledge with PowerShell
 
 ## Scripts
 
