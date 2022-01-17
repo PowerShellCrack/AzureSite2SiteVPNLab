@@ -391,8 +391,10 @@ save
 #endregion
 
 #Always output script
+#TEST $LogfileName = 'vyostest.log'
 $ScriptName = $LogfileName.replace('.log','.script')
-$VyOSLanCmd -split '\n' | %{$_ | Set-Content "$PSScriptRoot\Logs\$ScriptName"}
+Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
+$VyOSLanCmd | Add-Content "$PSScriptRoot\Logs\$ScriptName" -Force
 
 If($RouterAutomationMode){
     Write-Host "Attempting to automatically configure router's lan settings..." -ForegroundColor Yellow
