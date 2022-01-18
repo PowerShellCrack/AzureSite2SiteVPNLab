@@ -1,15 +1,117 @@
-Param(
+<#
+    .SYNOPSIS
+        Builds a Azure VM
 
+    .DESCRIPTION
+        Builds a Azure VM
+
+    .NOTES
+        1. Build VM configurations
+        2. Create a resource group
+        3. Create Storage Account
+        4. Creating a new NSG
+        5. Attach VM nic to subnet
+        6. Build local admin credentials
+        7. Set VM Configuration and boot info
+        8. Deploying virtual machine
+        9. Set Autoshutdown
+        10. Join Domain (optional)
+
+    .PARAMETER VMName
+    STRING
+    Specifies an custom VM name; if already found increments name by 1
+
+    .PARAMETER OSType
+    SET
+    Decides to deploy the latest Windows 10 or latest Windows Server operating system
+
+    .PARAMETER JoinDomain
+    SWITCH
+
+    .PARAMETER ResourceGroup
+    MANDATORY (if JoinDomain switch is used)
+
+    .PARAMETER Domain
+    MANDATORY (if JoinDomain switch is used)
+
+    .PARAMETER OU
+    STRING (if JoinDomain switch is used)
+
+    .PARAMETER Credentials
+    MANDATORY (if JoinDomain switch is used)
+
+    .EXAMPLE
+
+    & '.\Step 4A-1. Build Azure VM.ps1'
+
+    RESULT: Builds a Windows Server VM
+
+    .EXAMPLE
+
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName CONTOSO-WK1 -OSType Workstation
+
+    RESULT: Builds a Windows 10 VM named CONTOSO-WK1
+
+    .EXAMPLE
+
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -ResourceGroup contoso-rg -Domain CONTOSO.local -Credentials (Get-Credential)
+
+    RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local using credentials
+
+    .EXAMPLE
+
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -ResourceGroup contoso-rg -Domain CONTOSO.local -Credentials (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
+
+    RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
+
+#>
+[CmdletBinding(DefaultParameterSetName = 'Workgroup')]
+Param(
     [ValidatePattern("^(?![0-9]{1,64}$)[a-zA-Z0-9-]{1,64}$")]
-    [string]$VMName
+    [string]$VMName,
+
+    [ValidateSet('Workstation', 'Server')]
+    [string]$OSType,
+
+    [Parameter(ParameterSetName = 'JoinDomain')]
+    [switch]$JoinDomain,
+
+    [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $RGs = Get-AzResourceGroup | Select -ExpandProperty ResourceGroupName
+
+        $RGs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("rg")]
+    [string]$ResourceGroup,
+
+    [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
+    [string]$Domain,
+
+    [Parameter(Mandatory = $false,ParameterSetName = 'JoinDomain')]
+    [ValidatePattern("(?=OU)(.*\n?)(?<=.)")]
+    [string]$OU,
+
+    [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
+    [SecureString]$Credentials
 )
+
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Compute,Az.Resources,Az.Storage,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 #https://docs.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell#create-a-virtual-machine
 #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell
 #https://docs.microsoft.com/en-us/powershell/module/az.compute/new-azvm?view=azps-2.8.0
-
 
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
@@ -61,6 +163,8 @@ Else{
 $AzureSimpleVM['ComputerName'] = $computername
 $AzureSimpleVM['Name'] = $newVMname
 $AzureSimpleVM['NICName'] = $newNIC
+
+
 
 Write-Host ("Virtual Machine name will be [{0}]" -f $AzureSimpleVM.Name)  -ForegroundColor Green
 #endregion
@@ -184,8 +288,32 @@ $VMConfig = Set-AzVMOperatingSystem -VM $VMConfig -Windows -ComputerName $AzureS
 $VMConfig = Add-AzVMNetworkInterface -VM $VMConfig -Id $NIC.Id
 
 #Set VM operating system parameters
-$VMConfig = Set-AzVMSourceImage -VM $VMConfig -PublisherName 'MicrosoftWindowsServer' -Offer 'WindowsServer' `
-            -Skus '2016-Datacenter' -Version latest
+Switch($OSType){
+
+    'Workstation' {
+        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
+            -PublisherName 'MicrosoftWindowsDesktop' `
+            -Offer 'Windows-10' `
+            -Skus 'rs5-enterprise' `
+            -Version latest
+    }
+    'Server'      {
+        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
+            -PublisherName 'MicrosoftWindowsServer' `
+            -Offer 'WindowsServer' `
+            -Skus '2016-Datacenter' `
+            -Version latest
+    }
+    default {
+        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
+            -PublisherName 'MicrosoftWindowsServer' `
+            -Offer 'WindowsServer' `
+            -Skus '2016-Datacenter' `
+            -Version latest
+    }
+}
+
+
 
 #Set boot diagnostic storage account
 $VMConfig = Set-AzVMBootDiagnostic -Disable -VM $VMConfig
@@ -260,6 +388,35 @@ Restart-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $Azur
             -Location $AzureSimpleConfig.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
 #>
 #endregion
+
+If($JoinDomain){
+    #https://docs.microsoft.com/en-us/powershell/module/az.compute/set-azvmaddomainextension?view=azps-7.1.0
+    If($OU){
+        $DomainParams = @{
+            DomainName=$Domain
+            Credential=$credential
+            JoinOption=0x00000001
+            OUPath=$OU
+        }
+    }Else{
+        $DomainParams = @{
+            DomainName=$Domain
+            Credential=$credential
+            JoinOption=0x00000001
+        }
+    }
+    Try{
+        Write-Host ("Attempting to join vm to domain [{0}]..." -f $Domain) -ForegroundColor White -NoNewline
+        Set-AzVMADDomainExtension -VMName $AzureSimpleVM.Name -ResourceGroupName $ResourceGroup @DomainParams -Restart
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    }
+
+}
+
+
 Write-Host ("Done creating virtual machine [{0}]" -f $AzureSimpleVM.Name) -ForegroundColor Green
 Write-Host "=================================================" -ForegroundColor Green
 

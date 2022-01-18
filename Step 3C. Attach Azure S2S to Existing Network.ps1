@@ -1,3 +1,80 @@
+<#
+    .SYNOPSIS
+        Sets up Site 2 Site VPN using existing Azure network
+
+    .DESCRIPTION
+        Sets up Site 2 Site VPN using existing Azure network
+
+    .NOTES
+        1. Gets new share key
+        2. Retrieves VyOS external IP
+        3. Grab the resource group
+        3. Find Virtual network
+        4. Create the VNet
+        5. Attach gateway to vnet
+        6. Create the local network gateway
+        7. Create a Public IP address
+        8. make the gateway
+        9. Create the VPN gateway
+        10. Create the Virtual Network Gateway
+        11. Create the VPN connection
+        12. Remove Public IP (optional)
+        13. Creating a new NSG (optional)
+        14. Enabled Autoshutdown on VM's (optional)
+        15. Create the VPN connection
+        16. Build VyOS VPN Configuration
+        17. Applies VyOS configurations
+        18. Check VPN connection
+
+    .PARAMETER Prefix
+    STRING
+
+    .PARAMETER ResourceGroup
+    MANDATORY
+
+    .PARAMETER VirtualNetwork
+    MANDATORY
+
+    .PARAMETER DnsIp
+    MANDATORY
+
+    .PARAMETER RemovePublicIps
+    SWITCH
+
+    .PARAMETER AttachNsg
+    SWITCH
+
+    .PARAMETER EnableVMAutoShutdown
+    SWITCH
+
+    .PARAMETER Force
+    SWITCH
+
+    .EXAMPLE
+
+    & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1'
+
+    RESULT: Build a VPN connection to existing virtual network with prefix of contoso
+
+    .EXAMPLE
+
+    & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1' -RemovePublicIps -AttachNsg
+
+    RESULT: Build a VPN connection to existing network with prefix of contoso while removing all other attached public ip and adds an Network Security Gateway for VMs on vnet
+
+    .EXAMPLE
+
+    & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1' -EnableVMAutoShutdown
+
+    RESULT: Build a VPN connection to existing network with prefix of contoso and enabled autoshutdown for all VM's
+
+    .EXAMPLE
+
+    & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1' -Force
+
+    RESULT: Build a VPN connection to existing network with prefix of contoso and Rebuilds vyos router's VPN settings
+#>
+[CmdletBinding()]
 Param(
     [string]$Prefix,
 
@@ -66,6 +143,7 @@ Param(
 $Prefix='contoso'
 $ResourceGroup='mecmcb-arm-rg'
 $VirtualNetwork='contoso-vnet'
+$DnsIp='10.120.0.1'
 #>
 
 $ErrorActionPreference = "Stop"

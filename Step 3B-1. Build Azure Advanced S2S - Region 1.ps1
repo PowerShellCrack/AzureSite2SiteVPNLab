@@ -1,3 +1,26 @@
+<#
+    .SYNOPSIS
+        Sets up Site 2 Site VPN in Azure in Region 1
+
+    .DESCRIPTION
+        Sets up Site 2 Site VPN in Azure Region 1 using hub and spoke design
+
+    .NOTES
+        1. Gets new share key
+        2. Retrieves VyOS external IP
+        3. Create a resource group
+        3. Create virtual network A (Hub) with gateway
+        4. Create virtual network B (Spoke)
+        5. Build Peering between vnets
+        6. Create a Public IP address
+        7. attach public ip to gateway
+        8. Create the VPN gateway
+        9. Create the local network gateway
+        10. Create the VPN connection
+        11. Build VyOS VPN Configuration
+        12. Applies VyOS configurations
+        13. Check VPN connection
+#>
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null

@@ -1,3 +1,16 @@
+<#
+    .SYNOPSIS
+        Connect Azure vnet to Azure vnets
+
+    .DESCRIPTION
+        Connect Azure Region 1 vnet and Region 2 vnet using VPN gateway
+
+    .NOTES
+        1. Get Region 1 gateway
+        2. Get Region 2 gateway
+        3. Building site-2-site VPN gateway connection to second Azure tenant gateway
+        4. Building site-2-site VPN gateway connection to first Azure tenant gateway
+#>
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null

@@ -1,5 +1,12 @@
 # Change log for AzureSite2SiteVPNLab
 
+## 1.4.0 - January 17, 2022
+
+- Fixed vyos setup script output; was out putting blank file in step 2
+- Added synopsis to each script; provide steps taken and parameters
+- Add OStype parameter to simple Azure VM script; allow Windows 10 or Windows Server deployment
+- Added domain join capability for VM; domain controller must exist
+
 ## 1.3.9 - January 13, 2022
 
 - check vNet for subnets; ensure vNet has required subnets added if vNet is already provisioned

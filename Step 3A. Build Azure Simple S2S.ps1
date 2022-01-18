@@ -1,3 +1,28 @@
+<#
+    .SYNOPSIS
+        Sets up Site 2 Site VPN in Azure
+
+    .DESCRIPTION
+        Sets up Site 2 Site VPN in Azure with 1 gateway and subnet (no hub and spoke)
+
+    .NOTES
+        1. Gets new share key
+        2. Retrieves VyOS external IP
+        3. Create a resource group
+        4. Build subnets configurations
+        5. Create the VNet; bind subnets
+        6. Attach gateway to vnet
+        7. Create the local network gateway
+        8. Create a Public IP address
+        9. Attaches public IP to gateway
+        10. Create the Virtual Network Gateway
+        11. Create the local network gateway
+        12. Create the VPN connection
+        13. Build VyOS VPN Configuration
+        14. Applies VyOS configurations
+        15. Check VPN connection
+#>
+
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
@@ -166,7 +191,7 @@ Else{
 }
 #endregion
 
-#region 7. make the gateway
+#region 7. Attaches public IP to gateway
 If( $subnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNet -ErrorAction SilentlyContinue )
 {
     Write-host ("Attaching Azure public IP [{0}] to gateway subnet [{1}]..." -f $AzureSimpleConfig.PublicIpName, 'GatewaySubnet') -ForegroundColor White -NoNewline
@@ -186,7 +211,7 @@ Else{
 }
 #endregion
 
-#region 8. Create the VPN gateway
+#region 8. Create the Virtual Network Gateway
 #Check to see if public IP is attached to VNG
 If( -Not(Get-AzVirtualNetworkGateway -Name $AzureSimpleConfig.VnetGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 {
@@ -211,7 +236,7 @@ Else{
 }
 #endregion
 
-#region 9. Create the Virtual Network Gateway
+#region 9. Create the Local Network Gateway
 If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue) )
 {
     Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor White -NoNewline
