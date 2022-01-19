@@ -25,11 +25,11 @@
     SET
     Decides to deploy the latest Windows 10 or latest Windows Server operating system
 
-    .PARAMETER JoinDomain
+    .PARAMETER SecureVM
     SWITCH
 
-    .PARAMETER ResourceGroup
-    MANDATORY (if JoinDomain switch is used)
+    .PARAMETER JoinDomain
+    SWITCH
 
     .PARAMETER Domain
     MANDATORY (if JoinDomain switch is used)
@@ -54,13 +54,13 @@
 
     .EXAMPLE
 
-    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -ResourceGroup contoso-rg -Domain CONTOSO.local -Credentials (Get-Credential)
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -Domain CONTOSO.local -Credentials (Get-Credential)
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local using credentials
 
     .EXAMPLE
 
-    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -ResourceGroup contoso-rg -Domain CONTOSO.local -Credentials (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -Domain CONTOSO.local -Credentials (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
 
@@ -74,26 +74,10 @@ Param(
     [string]$OSType,
 
     [Parameter(ParameterSetName = 'JoinDomain')]
+    [switch]$SecureVM,
+
+    [Parameter(ParameterSetName = 'JoinDomain')]
     [switch]$JoinDomain,
-
-    [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
-    [ArgumentCompleter( {
-        param ( $commandName,
-                $parameterName,
-                $wordToComplete,
-                $commandAst,
-                $fakeBoundParameters )
-
-
-        $RGs = Get-AzResourceGroup | Select -ExpandProperty ResourceGroupName
-
-        $RGs | Where-Object {
-            $_ -like "$wordToComplete*"
-        }
-
-    } )]
-    [Alias("rg")]
-    [string]$ResourceGroup,
 
     [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
     [string]$Domain,
@@ -107,7 +91,7 @@ Param(
 )
 
 $ErrorActionPreference = "Stop"
-#Requires -Modules Az.Accounts,Az.Compute,Az.Resources,Az.Storage,Az.Network
+#Requires -Modules Az.Accounts,Az.Compute,Az.Resources,Az.Storage,Az.Network,Az.KeyVault
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 #https://docs.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell#create-a-virtual-machine
 #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell
@@ -350,6 +334,43 @@ If($AzureSimpleVM.EnableAutoShutdown){
 }
 #endregion
 
+
+If($SecureVM){
+    # Advisor Recommendation (high): Virtual machines should encrypt temp disks, caches, and data flows between Compute and Storage resources
+    #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/disk-encryption-powershell-quickstart
+    $KeyVaultName = ($LabPrefix + 'vmdiskkeys')
+    If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location eastus -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+        Write-Host ("Creating Azure Keyvault [{0}]..." -f $KeyVaultName) -ForegroundColor White -NoNewline
+        Try{
+            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location eastus -EnabledForDiskEncryption | Out-Null
+            Write-Host "Done" -ForegroundColor Green
+        }
+        Catch{
+            Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
+    }
+    Else{
+        Write-Host ("Using Azure Azure Keyvault [{0}]" -f $KeyVaultName) -ForegroundColor Green
+    }
+
+    #$AzKeyVault = Get-AzKeyVault -VaultName $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
+    Write-Host ("Enabling Disk encryption on virtual Machine [{0}]..." -f $AzureSimpleVM.Name) -ForegroundColor White -NoNewline
+    Try{
+        Set-AzVMDiskEncryptionExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -DiskEncryptionKeyVaultUrl $AzKeyVault.VaultUri -DiskEncryptionKeyVaultId $AzKeyVault.ResourceId -Force
+        Write-Host ("Done. Key is stored in Azure KeyVault: {0}" -f $KeyVaultName) -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    }
+
+    #TODO
+    # Advisor Recommendation (high): Install endpoint protection solution on virtual machines
+    # Advisor Recommendation (high): SQL IaaS Agent should be installed in full mode
+    # Advisor Recommendation (Medium): Network traffic data collection agent should be installed on Windows virtual machines
+    # Advisor Recommendation (Medium): Windows Defender Exploit Guard should be enabled on machines
+    # Advisor Recommendation (Low): Azure Backup should be enabled for virtual machines
+}
 #region Reset VM password (Not working)
 <#
 #Re-reset password. Sometimes password set during deployment does not work
@@ -364,7 +385,7 @@ $typeParams = @{
 }
 $typeHandlerVersion = (Get-AzVMExtensionImage @typeParams | Sort-Object Version -Descending | Select-Object -first 1).Version
 
-#remove the access exetension
+#remove the access extension
 Remove-AzVMAccessExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name 'enablevmaccess' -Force
 
 #build params
@@ -407,7 +428,7 @@ If($JoinDomain){
     }
     Try{
         Write-Host ("Attempting to join vm to domain [{0}]..." -f $Domain) -ForegroundColor White -NoNewline
-        Set-AzVMADDomainExtension -VMName $AzureSimpleVM.Name -ResourceGroupName $ResourceGroup @DomainParams -Restart
+        Set-AzVMADDomainExtension -VMName $AzureSimpleVM.Name -ResourceGroupName $AzureSimpleConfig.ResourceGroupName @DomainParams -Restart
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
