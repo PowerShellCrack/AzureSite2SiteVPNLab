@@ -339,7 +339,7 @@ If($SecureVM){
     # Advisor Recommendation (high): Virtual machines should encrypt temp disks, caches, and data flows between Compute and Storage resources
     #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/disk-encryption-powershell-quickstart
     $KeyVaultName = ($LabPrefix + 'vmdiskkeys')
-    If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location eastus -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+    If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
         Write-Host ("Creating Azure Keyvault [{0}]..." -f $KeyVaultName) -ForegroundColor White -NoNewline
         Try{
             $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location eastus -EnabledForDiskEncryption | Out-Null

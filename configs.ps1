@@ -2,16 +2,18 @@
 Param(
     [switch]$NoAzureCheck,
     [switch]$NoVyosISOCheck
+
 )
 #============================================
 # General Configurations - EDIT THIS
 #============================================
+$IgnoreISECheck = $False #PowerShell ISE has issues with prompting for password during VYOS setup. Recommend running in PowerShell or VSCode.
 
 $LabPrefix = 'Contoso' #identifier for names in lab
 
 $domain = 'contoso.com' #just a name for now (no DC install....yet)
 
-$Email = '<email>' #used only in VM notification for VM autoshutdown settings
+$Email = '<email>' #used only in VM notification for VM auto shutdown settings
 
 #this is used to configure default username and password on Azure VM's
 $VMAdminUser = 'xAdmin'
@@ -204,7 +206,7 @@ If($null -eq $scriptRoot){
 . "$FunctionPath\azure.ps1"
 #endregion
 
-Write-Host "Processed functions. Loading configuration data..." -ForegroundColor Green
+Write-Host "Processed functions. Loading configuration data..." -ForegroundColor Cyan
 
 #check if SSH and SCP exist for automation mode to work
 If(-Not(Test-Command ssh) -and -Not(Test-Command scp) -and -Not(Test-Command ssh-keygen) )
@@ -255,11 +257,14 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
 #============================================
 #region connect to Azure if not already connected
 If(!$NoAzureCheck){
+    Write-Host "Checking for Az Powershell module..." -ForegroundColor White -NoNewline
     If((Find-Module Az).Version -in (Get-InstalledModule Az -AllVersions).version){
-        Write-Verbose "Az Module Loaded"
+        Write-Host ("Az Module [{0}] installed" -f (Get-InstalledModule Az -AllVersions).version) -ForegroundColor Green
     }
     Else{
+        Write-Host "Updating module, this can take awhile..." -ForegroundColor Yellow -NoNewline
         Install-Module -Name Az -AllowClobber -Scope AllUsers -Force
+        Write-Host "Done" -ForegroundColor Green
     }
 
     Try{
@@ -289,6 +294,20 @@ If(!$NoAzureCheck){
     }
 }
 #endregion
+
+If(Test-IsISE){
+    If($IgnoreISECheck -eq $False){
+        Write-Host "===============================" -ForegroundColor Black -BackgroundColor Yellow
+        Write-Host "      CONTINUE AT OWN RISK     " -ForegroundColor Black -BackgroundColor Yellow
+        Write-Host "===============================" -ForegroundColor Black -BackgroundColor Yellow
+        Write-Host "You are currently running this script using PowerShell ISE.`nThere are known issues with the interface during vyos configurations" -ForegroundColor Yellow
+        $ISEResponse = Read-host "Would you like to continue? [Y or N]"
+        If ($ISEResponse -eq 'N'){
+            Break
+        }
+    }
+}
+
 #============================================
 # HYPER-V CHECK
 #============================================
@@ -369,7 +388,7 @@ If(!$NoVyosISOCheck){
                 Write-Host "Done" -ForegroundColor Green
             }
             Catch{
-                Write-host ('UNable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+                Write-host ('Unable to download [{0}]: {1}' -f $vyosfilename,$_.Exception.message) -ForegroundColor Black -BackgroundColor Red
                 break
             }
             Finally{

@@ -159,7 +159,10 @@ _BETA_: **Step 4A-2. Build Hyper-V VM.ps1** <-- Sets up a VM in Hyper-V (not una
 - Some ISP's may not allow VPN traffic; no know work around for this
 - These scripts have not been tested with Azure Gov or other Azure community clouds
 - After Site 2 Site VPN is created; step that check for connectivity may show _unknown) or _not connected_; this may be due to Azure's graph api call not updating immediately. Recommend manual check
+    - Go to Azure Portal --> Local Network Gateways --> Click on new gateway --> Connections
 - VyOS router will remove it trusted ssh host list on each reboot. This is by design and will require login for each script implementation; looking for alternate method to resolve this
+- There are known issues with the PowerShell ISE interface during VyOS configurations; Recommend running with Powershell console or VScode.
+
 ## References
 
 - [Create a VPN Gateway and add a Site-to-Site connection using PowerShell](https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-create-site-to-site-rm-powershell)

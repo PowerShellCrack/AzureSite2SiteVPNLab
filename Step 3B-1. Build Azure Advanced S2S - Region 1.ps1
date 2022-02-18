@@ -181,10 +181,10 @@ If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -
     Write-Host ("Creating Azure spoke virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -ForegroundColor White -NoNewline
     Try{
         $vNetB = New-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-                            -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix[0]
+                            -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
-                -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix | Out-Null
+                -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix[0] | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -203,8 +203,8 @@ Else{
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
-If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -VirtualNetwork $vNetA.Name) -or `
-    -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameBA -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -VirtualNetwork $vNetB.Name) )
+If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -VirtualNetwork $vNetA.Name -ErrorAction SilentlyContinue) -or `
+    -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigSiteA.VnetPeerNameBA -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -VirtualNetwork $vNetB.Name -ErrorAction SilentlyContinue) )
 {
     Write-Host ("Creating peering between vnets [{0}] and [{1}]..." -f $AzureAdvConfigSiteA.VnetPeerNameAB,$AzureAdvConfigSiteA.VnetPeerNameBA) -ForegroundColor White -NoNewline
     Try{
@@ -229,7 +229,7 @@ $gwsubnet = Get-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwo
 
 
 #region 5. Create a Public IP address
-If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName).IpAddress )
+If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigSiteA.PublicIpName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue).IpAddress )
 {
     Write-Host ("Creating Azure public IP [{0}]..." -f $AzureAdvConfigSiteA.PublicIPName) -ForegroundColor White -NoNewline
     Try{
@@ -314,7 +314,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGate
     Write-host ("Building the local network gateway [{0}]..." -f $AzureAdvConfigSiteA.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureAdvConfigSiteA.LocalGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-                -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys @LNGBGPParams | Out-Null
+                -Location $AzureAdvConfigSiteA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) @LNGBGPParams | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -653,7 +653,7 @@ If($RunManualSteps){
     Write-Host "Information needed to configure local router vpn:" -ForegroundColor Yellow
     Write-Host ("Azure Location:           {0}" -f $AzureAdvConfigSiteA.LocationName)
     Write-Host ("Azure Peer Public IP:     {0}" -f $azpip.IpAddress)
-    Write-Host ("Remote Subnet Prefix:     {0}" -f $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix)
+    Write-Host ("Remote Subnet Prefix:     {0}" -f ($AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix -join ','))
     Write-host ("Shared Key (PSK):         {0}" -f $Global:RegionASharedPSK)
     Write-Host ("BGP Enabled:              {0}" -f $UseBGP.ToString())
     If($UseBGP){

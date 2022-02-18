@@ -1,8 +1,16 @@
 # Change log for AzureSite2SiteVPNLab
 
+## 1.4.1 - February 18, 2022
+
+- Fixed VnetSpoke subnet address on 3B-1 and 2 scripts; was calling an array not a single subnet. Future developments will support multiple subnets
+- Fixed resource checks for peering and public IP; set silently continue for non existing resources error
+- Added ISE check; PowerShell ISE has issues with prompting for password during VyOS setup. Recommend running in PowerShell or VSCode. Thanks Ankit Oberoi
+- Fixed AddressPrefix for LNG; Converted addresses into an array.
+- Verbose output during Az module check; provides clarity of what script is doing.
+
 ## 1.4.0 - January 17, 2022
 
-- Fixed vyos setup script output; was out putting blank file in step 2
+- Fixed VyOS setup script output; was out putting blank file in step 2
 - Added synopsis to each script; provide steps taken and parameters
 - Add OStype parameter to simple Azure VM script; allow Windows 10 or Windows Server deployment
 - Added domain join capability for VM; domain controller must exist
