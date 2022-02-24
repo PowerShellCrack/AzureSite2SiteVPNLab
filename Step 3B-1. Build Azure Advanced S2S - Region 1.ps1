@@ -16,10 +16,19 @@
         7. attach public ip to gateway
         8. Create the VPN gateway
         9. Create the local network gateway
-        10. Create the VPN connection
-        11. Build VyOS VPN Configuration
-        12. Applies VyOS configurations
-        13. Check VPN connection
+        10. Update gateway transit in peering
+        11. Create the VPN connection
+        12. Build VyOS VPN Configuration
+        13. Applies VyOS configurations
+        14. Check VPN connection
+
+
+        TODO:
+
+        - Clean routes in vyos before adding
+        - Add Routetable in azure back to onprem
+
+#
 #>
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
@@ -301,7 +310,6 @@ Else{
 }
 #endregion
 
-
 #region 8. Setup LNG connection
 $LNGBGPParams=@{}
 If($UseBGP){
@@ -342,6 +350,36 @@ Else{
 }
 #endregion
 
+
+#https://docs.microsoft.com/en-us/powershell/module/azurerm.network/set-azurermvirtualnetworkpeering?view=azurermps-6.13.0
+Write-Host ("Enabling Gateway transit setting for vnet [{0}]..." -f $AzureAdvConfigSiteA.VnetPeerNameAB) -ForegroundColor White -NoNewline
+Try{
+    $HubvNetPeering = Get-AzVirtualNetworkPeering -VirtualNetworkName $vNetA.Name -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.VnetPeerNameAB
+    # Change AllowGatewayTransit property
+    $HubvNetPeering.AllowGatewayTransit = $True
+    # Update the virtual network peering
+    Set-AzVirtualNetworkPeering -VirtualNetworkPeering $HubvNetPeering | Out-Null
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+}
+
+
+Write-Host ("Enabling Remote Gateway and Traffic forwarding settings for vnet [{0}]..." -f $AzureAdvConfigSiteA.VnetPeerNameBA) -ForegroundColor White -NoNewline
+Try{
+    $SpokevNetPeering = Get-AzVirtualNetworkPeering -VirtualNetworkName $vNetB.name -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $AzureAdvConfigSiteA.VnetPeerNameBA
+    # Change the UseRemoteGateways property
+    $SpokevNetPeering.UseRemoteGateways = $True
+    # Change value of AllowForwardedTraffic property
+    $SpokevNetPeering.AllowForwardedTraffic = $True
+    # Update the virtual network peering
+    Set-AzVirtualNetworkPeering -VirtualNetworkPeering $SpokevNetPeering | Out-Null
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+}
 
 #region 9. Create the VPN connection
 $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName `
@@ -419,7 +457,8 @@ If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
 #delete current configurations
 delete vpn ipsec
-delete protocols bgp
+delete protocols
+delete nat
 `n
 "@
 }
@@ -513,6 +552,17 @@ set nat source rule $($RuleID) destination address '$($vNetBPrefix)'
 set nat source rule $($RuleID) exclude
 set nat source rule $($RuleID) outbound-interface 'eth0'
 set nat source rule $($RuleID) source address '$($VyOSConfig.LocalCIDRPrefix)'
+"@
+}
+
+#If reset is true, all NAT configs will be delete; need to re-add this one
+If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
+    $VyOSLanCmd += @"
+
+#Enable NAT Configuration
+set nat source rule 100 outbound-interface eth0
+set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
+set nat source rule 100 translation address masquerade
 "@
 }
 

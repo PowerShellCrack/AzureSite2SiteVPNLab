@@ -65,6 +65,8 @@ Catch{
     Break
 }
 
+
+
 # check BGP ip address
 If($UseBGP){
     $gateway1.BgpSettingsText

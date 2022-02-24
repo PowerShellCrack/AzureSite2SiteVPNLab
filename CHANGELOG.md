@@ -1,5 +1,12 @@
 # Change log for AzureSite2SiteVPNLab
 
+
+## 1.4.1 - February 24, 2022
+
+- Added Gateway transit and Remote gateway's settings for peering; fixes communications from onprem to spoke vnet
+- Added VM additional parmas for site 1 and 2. Fixed OSType error and domain join creds issue.
+-
+
 ## 1.4.1 - February 18, 2022
 
 - Fixed VnetSpoke subnet address on 3B-1 and 2 scripts; was calling an array not a single subnet. Future developments will support multiple subnets

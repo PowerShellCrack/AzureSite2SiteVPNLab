@@ -54,13 +54,13 @@
 
     .EXAMPLE
 
-    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -Domain CONTOSO.local -Credentials (Get-Credential)
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential)
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local using credentials
 
     .EXAMPLE
 
-    & '.\Step 4A-1. Build Azure VM.ps1' -VMName DTOLAB-WK21 -OSType Workstation -JoinDomain -Domain CONTOSO.local -Credentials (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
+    & '.\Step 4A-1. Build Azure VM.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
 
@@ -71,7 +71,7 @@ Param(
     [string]$VMName,
 
     [ValidateSet('Workstation', 'Server')]
-    [string]$OSType,
+    [string]$OSType = 'Server',
 
     [Parameter(ParameterSetName = 'JoinDomain')]
     [switch]$SecureVM,
@@ -87,7 +87,7 @@ Param(
     [string]$OU,
 
     [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
-    [SecureString]$Credentials
+    [System.Management.Automation.PSCredential]$DomainJoinCreds
 )
 
 $ErrorActionPreference = "Stop"
@@ -272,30 +272,29 @@ $VMConfig = Set-AzVMOperatingSystem -VM $VMConfig -Windows -ComputerName $AzureS
 $VMConfig = Add-AzVMNetworkInterface -VM $VMConfig -Id $NIC.Id
 
 #Set VM operating system parameters
-Switch($OSType){
+If($OSType){
+    Switch($OSType){
 
-    'Workstation' {
-        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
-            -PublisherName 'MicrosoftWindowsDesktop' `
-            -Offer 'Windows-10' `
-            -Skus 'rs5-enterprise' `
-            -Version latest
-    }
-    'Server'      {
-        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
-            -PublisherName 'MicrosoftWindowsServer' `
-            -Offer 'WindowsServer' `
-            -Skus '2016-Datacenter' `
-            -Version latest
-    }
-    default {
-        $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
-            -PublisherName 'MicrosoftWindowsServer' `
-            -Offer 'WindowsServer' `
-            -Skus '2016-Datacenter' `
-            -Version latest
+        'Workstation' {
+            $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
+                -PublisherName 'MicrosoftWindowsDesktop' `
+                -Offer 'Windows-10' `
+                -Skus 'rs5-enterprise' `
+                -Version latest
+        }
+        'Server'      {
+            $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
+                -PublisherName 'MicrosoftWindowsServer' `
+                -Offer 'WindowsServer' `
+                -Skus '2016-Datacenter' `
+                -Version latest
+        }
     }
 }
+Else{
+    $VMConfig = Set-AzVMSourceImage -VM $VMConfig -PublisherName 'MicrosoftWindowsServer' -Offer 'WindowsServer' -Skus '2016-Datacenter' -Version latest
+}
+
 
 
 
@@ -347,7 +346,6 @@ If($SecureVM){
         }
         Catch{
             Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-            Break
         }
     }
     Else{
@@ -371,58 +369,21 @@ If($SecureVM){
     # Advisor Recommendation (Medium): Windows Defender Exploit Guard should be enabled on machines
     # Advisor Recommendation (Low): Azure Backup should be enabled for virtual machines
 }
-#region Reset VM password (Not working)
-<#
-#Re-reset password. Sometimes password set during deployment does not work
-$VM = Get-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleVM.Name
 
-Get-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Status
-#must grab the VM Computer Type handler
-$typeParams = @{
- 'PublisherName' = 'Microsoft.Compute'
- 'Type' = 'VMAccessAgent'
- 'Location' = $AzureSimpleConfig.LocationName
-}
-$typeHandlerVersion = (Get-AzVMExtensionImage @typeParams | Sort-Object Version -Descending | Select-Object -first 1).Version
-
-#remove the access extension
-Remove-AzVMAccessExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name 'enablevmaccess' -Force
-
-#build params
-$extensionParams = @{
-    Credential = $Credential
-    VMName = $AzureSimpleVM.Name
-    ResourceGroupName = $AzureSimpleConfig.ResourceGroupName
-    Name = 'enablevmaccess'
-    Location = $AzureSimpleConfig.LocationName
-    TypeHandlerVersion = $typeHandlerVersion
-}
-#add enablevmaccess back with new creds
-Set-AzVMAccessExtension @extensionParams
-#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name `
-            -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureSimpleConfig.LocationName
-Update-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VM $VM
-Restart-AzVM -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Name $AzureSimpleVM.Name
-
-#Reset the Remote Desktop Services configuration
-#Set-AzVMAccessExtension -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -VMName $AzureSimpleVM.Name -Name "VMRDPAccess" `
-            -Location $AzureSimpleConfig.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
-#>
-#endregion
 
 If($JoinDomain){
     #https://docs.microsoft.com/en-us/powershell/module/az.compute/set-azvmaddomainextension?view=azps-7.1.0
     If($OU){
         $DomainParams = @{
             DomainName=$Domain
-            Credential=$credential
+            Credential=$DomainJoinCreds
             JoinOption=0x00000001
             OUPath=$OU
         }
     }Else{
         $DomainParams = @{
             DomainName=$Domain
-            Credential=$credential
+            Credential=$DomainJoinCreds
             JoinOption=0x00000001
         }
     }
@@ -437,8 +398,8 @@ If($JoinDomain){
 
 }
 
-
-Write-Host ("Done creating virtual machine [{0}]" -f $AzureSimpleVM.Name) -ForegroundColor Green
-Write-Host "=================================================" -ForegroundColor Green
+Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
+Write-Host (" Done creating virtual machine [{0}]" -f $AzureSimpleVM.Name) -ForegroundColor Black -BackgroundColor Green
+Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
 
 Stop-Transcript
