@@ -26,6 +26,9 @@
         17. Applies VyOS configurations
         18. Check VPN connection
 
+    .PARAMETER ConfigurationFile
+    STRING
+
     .PARAMETER Prefix
     STRING
 
@@ -73,10 +76,35 @@
     & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1' -Force
 
     RESULT: Build a VPN connection to existing network with prefix of contoso and Rebuilds vyos router's VPN settings
+
+    .EXAMPLE
+
+    & '.\Step 3C. Attach Azure S2S to Existing Network.ps1' -ConfigurationFile configs-gov.ps1 -Prefix 'contoso' -ResourceGroup 'mecmcb-arm-rg' -VirtualNetwork 'contoso-vnet' -DnsIp '10.120.0.1' -Force
+
+     RESULT: Build a VPN connection to existing network with prefix of contoso and Rebuilds vyos router's VPN settings in Azure Gov
 #>
 [CmdletBinding()]
 Param(
     [string]$Prefix,
+
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1",
 
     [Parameter(Mandatory = $true)]
     [ArgumentCompleter( {
@@ -155,14 +183,15 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
+
 
 #if prefix specified, make it lower case else use config's prefix
 If($Prefix){$Prefix = $Prefix.ToLower()}Else{$Prefix = $LabPrefix.ToLower()}
@@ -701,17 +730,17 @@ If($azpip.IpAddress -eq 'Not Assigned'){
 
 #region 10. Build VyOS VPN Configuration Commands
 $VyOSFinal = @"
+`n
 # Enter configuration mode.
 configure
-`n
 "@
 
 If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
+`n
 #delete current configurations
 delete vpn ipsec
 delete protocols
-`n
 "@
 }
 
@@ -823,8 +852,8 @@ set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
 foreach ($vNetPrefix in $vNet.AddressSpace.AddressPrefixes){
-    #use the last octet of network id as the rule id (keeps it unique)
-    [int]$RuleID = ((Get-NetworkDetails -CidrAddress $vNetPrefix).NetworkID -replace '\.0','').split('.')[-1]
+    #use the last octet of network id as the rule id (keeps it sort of unique)
+    [int32]$RuleID = ((Get-NetworkDetails -CidrAddress $vNetAPrefix).NetworkID -replace '\.0','').split('.')[-1]
     If( ($RuleID -eq 10) -or ($RuleID -eq 100) ){$RuleID++}
     $VyOSFinal += @"
 `n
@@ -843,7 +872,7 @@ run reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
 }
 
 $VyOSFinal += @"
-
+`n
 commit
 save
 "@

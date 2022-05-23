@@ -70,19 +70,42 @@
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
 
+    .EXAMPLE
+
+    & '.\Step 4B-1. Build Azure VM -Region 1.ps1' -ConfigurationFile configs-gov.ps1  -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
+
+    RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials in Azure Gov
 #>
 [CmdletBinding(DefaultParameterSetName = 'Workgroup')]
 Param(
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1",
+
     [ValidatePattern("^(?![0-9]{1,64}$)[a-zA-Z0-9-]{1,64}$")]
     [string]$VMName,
 
     [ValidateSet('Workstation', 'Server')]
     [string]$OSType = 'Server',
 
-    [Parameter(ParameterSetName = 'JoinDomain')]
     [switch]$SecureVM,
 
-    [Parameter(ParameterSetName = 'JoinDomain')]
+    [Parameter(Mandatory = $false,ParameterSetName = 'JoinDomain')]
     [switch]$JoinDomain,
 
     [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
@@ -106,18 +129,23 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
 
 #start transcript
 $LogfileName = "$RegionAName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+
+#install Devlabs for Arm Templates support
+If((Get-AzResourceProvider -ProviderNamespace Microsoft.DevTestLab).RegistrationState -eq 'NotRegistered'){
+    Register-AzResourceProvider -ProviderNamespace Microsoft.DevTestLab | Out-Null
+}
 
 #region Build VM configurations
 $VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue
@@ -176,14 +204,15 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 #build random char for storage name
 
 If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureAdvConfigSiteA.StorageSku} | Select -First 1)){
+            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureAdvConfigSiteA.StorageSku -and $_.StorageAccountName -like "$($RegionAName -replace '\W')*"} | Select -First 1)){
+
+    $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
+    $storageName = ($RegionAName +'-' + $randomChar).ToLower() -replace '[\W]', ''
     Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -ForegroundColor White -NoNewline
     Try{
-        $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
-        $storageName = ($RegionName +'-' + $randomChar).ToLower() -replace '[\W]', ''
-
         $StorageAccount = New-AzStorageAccount -Name $storageName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -SkuName $AzureAdvConfigSiteA.StorageSku `
                             -Location $AzureAdvConfigSiteA.LocationName -Kind Storage | Out-Null
+        $AzureAdvConfigSiteA['StorageAccount'] = $storageName
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -193,9 +222,9 @@ If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfi
 }
 Else{
     Write-Host ("Using Azure storage account [{0}]" -f $StorageAccount.StorageAccountName) -ForegroundColor Green
+    $AzureAdvConfigSiteA['StorageAccount'] = $StorageAccount.StorageAccountName
 }
 #endregion
-
 
 #region Creating a new NSG to allow PS Remoting Port 5986 and RDP Port 3389
 #grab Vnet for NSG and NIC configurations
@@ -291,7 +320,7 @@ If($OSType){
             $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
                 -PublisherName 'MicrosoftWindowsServer' `
                 -Offer 'WindowsServer' `
-                -Skus '2016-Datacenter' `
+                -Skus '2019-datacenter-gensecond' `
                 -Version latest
         }
     }
@@ -302,7 +331,7 @@ Else{
 
 
 #Set boot diagnostic storage account
-$VMConfig = Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -StorageAccountName $StorageAccount -ErrorAction SilentlyContinue
+$VMConfig = Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -StorageAccountName $AzureAdvConfigSiteA.StorageAccount -ErrorAction SilentlyContinue
 Try{
     Write-Host ("Deploying virtual machine [{0}]..." -f $AzureVMSiteA.Name) -ForegroundColor White -NoNewline
     New-AzVM -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName | Out-Null
@@ -343,7 +372,7 @@ If($SecureVM){
     If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
         Write-Host ("Creating Azure Keyvault [{0}]..." -f $KeyVaultName) -ForegroundColor White -NoNewline
         Try{
-            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location eastus -EnabledForDiskEncryption | Out-Null
+            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -EnabledForDiskEncryption | Out-Null
             Write-Host "Done" -ForegroundColor Green
         }
         Catch{
@@ -413,23 +442,30 @@ Restart-AzVM -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Name $Az
 
 If($JoinDomain){
     #https://docs.microsoft.com/en-us/powershell/module/az.compute/set-azvmaddomainextension?view=azps-7.1.0
+    $DomainParams = @{
+        Name='domainjoinextension'
+        VMName=$AzureVMSiteA.Name
+        ResourceGroupName=$AzureAdvConfigSiteA.ResourceGroupName
+    }
+
     If($OU){
-        $DomainParams = @{
+        $DomainParams += @{
             DomainName=$Domain
             Credential=$DomainJoinCreds
             JoinOption=0x00000001
             OUPath=$OU
         }
-    }Else{
-        $DomainParams = @{
+    }
+    Else{
+        $DomainParams += @{
             DomainName=$Domain
             Credential=$DomainJoinCreds
             JoinOption=0x00000001
         }
     }
     Try{
-        Write-Host ("Attempting to join vm to domain [{0}]..." -f $Domain) -ForegroundColor White -NoNewline
-        Set-AzVMADDomainExtension -VMName $AzureVMSiteA.Name -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName @DomainParams -Restart
+        Write-Host ("Attempting to join [{0}] to domain [{1}]..." -f $AzureVMSiteA.Name,$Domain) -ForegroundColor White -NoNewline
+        Set-AzVMADDomainExtension @DomainParams -Restart -Verbose
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{

@@ -1,11 +1,17 @@
 # Change log for AzureSite2SiteVPNLab
 
+## 1.5.0 - May 21, 2022
+
+- Added support for Azure Gov; updates location to use Virginia for site A and Arizona for site B
+- Fixed DNS server adding to Azure Vnet; only add them to new vnets.
+- Change VM creations to use Gen 2; fixed domain join process requiring name extension and Microsoft.devlab AZ registration
+- Adding Policy based routing; still in beta; provides routing for multiple S2S VPN
+- Fixed storage account creation during VM creation; finds an existing storage account after the first vm.
 
 ## 1.4.1 - February 24, 2022
 
 - Added Gateway transit and Remote gateway's settings for peering; fixes communications from onprem to spoke vnet
-- Added VM additional parmas for site 1 and 2. Fixed OSType error and domain join creds issue.
--
+- Added VM additional params for site 1 and 2. Fixed OSType error and domain join creds issue.
 
 ## 1.4.1 - February 18, 2022
 

@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Sets up Azure to Azure Vnet peering
 
@@ -13,7 +13,7 @@
 
     .EXAMPLE
 
-    & '.\Step 5. Create Vnet-To-Vnet Peering.ps1 -ConfigurationFile configs-gov.ps1
+    & '.\Step 3B-4. Connect Azure to Azure vNets.ps1 -ConfigurationFile configs-gov.ps1
 #>
 param(
 

@@ -10,3 +10,4 @@ configs.example.ps1
 !/isos/
 /isos/*
 hyperv.ps1
+*.dtolab.ps1

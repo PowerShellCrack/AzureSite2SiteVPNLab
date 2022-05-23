@@ -5,6 +5,8 @@
     .DESCRIPTION
         Sets up Site 2 Site VPN in Azure Region 1 using hub and spoke design
 
+
+
     .NOTES
         1. Gets new share key
         2. Retrieves VyOS external IP
@@ -24,12 +26,42 @@
 
 
         TODO:
-
+        - Build Policy based tunneling: https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-connect-multiple-policybased-rm-ps
         - Clean routes in vyos before adding
         - Add Routetable in azure back to onprem
 
-#
+    .PARAMETER ConfigurationFile
+    STRING
+
+    .PARAMETER SkipVYOSSetup
+    switch
+
+    .EXAMPLE
+
+    & '.\Step 3B-1. Build Azure Advanced S2S - Region 1.ps1 -ConfigurationFile configs-gov.ps1
 #>
+param(
+
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1"
+)
+
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
@@ -38,12 +70,12 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
 
@@ -155,6 +187,12 @@ If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -Re
         #>
         #Add-AzVirtualNetworkSubnetConfig @SubnetConfigSplat | Out-Null
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix | Out-Null
+
+        #add dns servers to vnet
+        If($VyOSConfig['InternalDNSIP'].count -gt 0){
+            $vNetA.DhcpOptions.DnsServers = $VyOSConfig['InternalDNSIP']
+        }
+
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -169,7 +207,6 @@ Else{
     Write-Host ("Using Azure hub virtual network [{0}]" -f $AzureAdvConfigSiteA.VnetHubName) -ForegroundColor Green
 }
 #endregion
-
 
 <#
 # Add Bastion host
@@ -194,6 +231,12 @@ If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetSpokeSubnetName -VirtualNetwork $vNetB `
                 -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix[0] | Out-Null
+
+        #Add DNS Server to Vnet
+        If($VyOSConfig['InternalDNSIP'].count -gt 0){
+            $vNetB.DhcpOptions.DnsServers += $VyOSConfig['InternalDNSIP']
+        }
+
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -209,6 +252,26 @@ Else{
 }
 #endregion
 
+
+<# Check DNS Server
+Try{
+    Write-Host (Adding DNS servers virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -ForegroundColor White -NoNewline
+    Foreach($DNSIP in $VyOSConfig['InternalDNSIP']){
+        #add dns servers to vnet
+        If($DNSIP -notin $vNetB.DhcpOptions.DnsServers){
+            $vNetB.DhcpOptions.DnsServers += $DNSIP
+        }
+    }
+    Write-Host "Done" -ForegroundColor Green
+}
+Catch{
+    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+    Break
+}
+Finally{
+    Set-AzVirtualNetwork -VirtualNetwork $vNetB | Out-Null
+}
+#>
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
@@ -278,6 +341,7 @@ $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureAdvConfigSiteA.Vne
 
 #region 7. Create the VPN gateway
 #Check to see if public IP is attached to VNG
+If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 {
     Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureAdvConfigSiteA.VnetGatewayName) -ForegroundColor White -NoNewline
@@ -407,9 +471,18 @@ Elseif( $null -eq $currentGwConnection)
     Write-host ("Create the VPN connection for [{0}]..." -f $AzureAdvConfigSiteA.ConnectionName) -ForegroundColor White -NoNewline
     Try{
         #Create the connection
-        New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
-            -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
-            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:RegionASharedPSK -EnableBgp $UseBGP | Out-Null
+        If($PolicyBased){
+            $ipsecpolicy = New-AzIpsecPolicy -IkeEncryption AES256 -IkeIntegrity SHA384 -DhGroup DHGroup24 -IpsecEncryption AES256 -IpsecIntegrity SHA256 -PfsGroup None -SALifeTimeSeconds 14400 -SADataSizeKilobytes 102400000
+            New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+                                            -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+                                            -ConnectionType IPsec -UsePolicyBasedTrafficSelectors $True -IpsecPolicies $ipsecpolicy -SharedKey $Global:RegionASharedPSK -EnableBgp $UseBGP | Out-Null
+        }
+        Else{
+            New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName `
+                                            -Location $AzureAdvConfigSiteA.LocationName -VirtualNetworkGateway1 $gateway1 -LocalNetworkGateway2 $Local `
+                                            -ConnectionType IPsec -RoutingWeight 10 -SharedKey $Global:RegionASharedPSK -EnableBgp $UseBGP | Out-Null
+        }
+
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -448,22 +521,23 @@ If($UseBGP){$bgpsettings = $gateway1.BgpSettingsText | ConvertFrom-Json}
 
 #region 10. Build VyOS VPN Configuration Commands
 $VyOSFinal = @"
+`n
 # Enter configuration mode.
 configure
-`n
 "@
 
 If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
+`n
 #delete current configurations
 delete vpn ipsec
 delete protocols
 delete nat
-`n
 "@
 }
 
 $VyOSFinal += @"
+`n
 # Set up the IPsec preamble for link Azures gateway
 set vpn ipsec esp-group azure compression 'disable'
 set vpn ipsec esp-group azure lifetime '3600'
@@ -484,7 +558,7 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-sha
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:RegionASharedPSK)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureAdvConfigSiteA.TunnelDescription)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureAdvConfigSiteA.TunnelDescription) ($($AzureAdvConfigSiteA.LocationName))'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$($VyOSExternalIP)'
@@ -522,7 +596,7 @@ set protocols static route '$($SubnetRoute)' next-hop '$($azpip.IpAddress)'
 If($UseBGP){
     $VyOSFinal += @"
 `n
-#BGP for Azure East
+#BGP for Azure $($AzureAdvConfigSiteA.LocationName)
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) ebgp-multihop '8'
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) remote-as '$($bgpsettings.Asn)'
 set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddress) soft-reconfiguration 'inbound'
@@ -530,8 +604,8 @@ set protocols bgp $($VyOSConfig.BgpAsn) neighbor $($bgpsettings.BgpPeeringAddres
 }
 
 foreach ($vNetAPrefix in $vNetA.AddressSpace.AddressPrefixes){
-    #use the last octet of network id as the rule id (keeps it unique)
-    $RuleID = ((Get-NetworkDetails -CidrAddress $vNetAPrefix).NetworkID -replace '\.0','').split('.')[-1]
+    #use the last octet of network id as the rule id (keeps it sort of unique)
+    [int32]$RuleID = ((Get-NetworkDetails -CidrAddress $vNetAPrefix).NetworkID -replace '\.0','').split('.')[-1]
     If( ($RuleID -eq 10) -or ($RuleID -eq 100) ){$RuleID++}
     $VyOSFinal += @"
 `n
@@ -543,22 +617,10 @@ set nat source rule $($RuleID) source address '$($VyOSConfig.LocalCIDRPrefix)'
 }
 
 
-foreach ($vNetBPrefix in $vNetB.AddressSpace.AddressPrefixes){
-    #use the last octet of network id as the rule id (keeps it unique)
-    $RuleID = ((Get-NetworkDetails -CidrAddress $vNetBPrefix).NetworkID -replace '\.0','').split('.')[-1]
-    $VyOSFinal += @"
-`n
-set nat source rule $($RuleID) destination address '$($vNetBPrefix)'
-set nat source rule $($RuleID) exclude
-set nat source rule $($RuleID) outbound-interface 'eth0'
-set nat source rule $($RuleID) source address '$($VyOSConfig.LocalCIDRPrefix)'
-"@
-}
-
 #If reset is true, all NAT configs will be delete; need to re-add this one
 If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
     $VyOSLanCmd += @"
-
+`n
 #Enable NAT Configuration
 set nat source rule 100 outbound-interface eth0
 set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
@@ -574,7 +636,7 @@ reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
 }
 
 $VyOSFinal += @"
-
+`n
 commit
 save
 "@
@@ -582,7 +644,8 @@ save
 
 
 #region 11: Build reset vpn config
-$VyOSReset = @"
+$VyOSVpnReset = @"
+`n
 restart vpn
 run show ipsec vpn sa
 `n
@@ -677,11 +740,11 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
                 Reset-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteA.ConnectionName `
                         -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Force | Out-Null
                 Start-Sleep 10
-                $VyOSResetScript = New-VyattaScript -Value $VyOSReset -AsObject
+                $VyOSVpnResetScript = New-VyattaScript -Value $VyOSVpnReset -AsObject
                 #TEST $VyOSFinalScript.value
                 New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
 
-                $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSResetScript.Path -Verbose
+                $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSVpnResetScript.Path -Verbose
                 If(!$Result){
                     Write-Host "The reset may have failed on vyos router; check vpn status and use manual process if necessary" -ForegroundColor Black -BackgroundColor Red
                 }

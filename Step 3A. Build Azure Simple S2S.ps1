@@ -21,23 +21,51 @@
         13. Build VyOS VPN Configuration
         14. Applies VyOS configurations
         15. Check VPN connection
+
+    .PARAMETER ConfigurationFile
+    STRING
+
+    .EXAMPLE
+
+    & '.\Step 3A. Build Azure Simple S2S.ps1 -ConfigurationFile configs-gov.ps1
 #>
+
+param(
+
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1"
+)
 
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 
-
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
 
@@ -333,21 +361,22 @@ If($azpip.IpAddress -eq 'Not Assigned'){
 
 #region 10. Build VyOS VPN Configuration Commands
 $VyOSFinal = @"
+`n
 # Enter configuration mode.
 configure
-`n
 "@
 
 If($VyOSConfig.ResetVPNConfigs){
     $VyOSFinal += @"
+`n
 #delete current configurations
 delete vpn ipsec
 delete protocols bgp
-`n
 "@
 }
 
 $VyOSFinal += @"
+`n
 # Set up the IPsec preamble for link Azures gateway
 set vpn ipsec esp-group azure compression 'disable'
 set vpn ipsec esp-group azure lifetime '3600'
@@ -367,7 +396,7 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-sha
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:SharedPSK)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureSimpleConfig.TunnelDescription)'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureSimpleConfig.TunnelDescription) ($($AzureAdvConfigSiteA.LocationName))'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$($VyOSExternalIP)'
@@ -386,7 +415,7 @@ set protocols static route '$($AzureSimpleConfig.VnetSubnetPrefix)' next-hop '$(
 
 foreach ($vNetPrefix in $vNet.AddressSpace.AddressPrefixes){
     #use the last octet of network id as the rule id (keeps it unique)
-    $RuleID = ((Get-NetworkDetails -CidrAddress $vNetPrefix).NetworkID -replace '\.0','').split('.')[-1]
+    [int32]$RuleID = ((Get-NetworkDetails -CidrAddress $vNetPrefix).NetworkID -replace '\.0','').split('.')[-1]
     If( ($RuleID -eq 10) -or ($RuleID -eq 100) ){$RuleID++}
     $VyOSFinal += @"
 `n
@@ -405,7 +434,7 @@ reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
 }
 
 $VyOSFinal += @"
-
+`n
 commit
 save
 "@
@@ -414,6 +443,7 @@ save
 
 #region 11: Build reset vpn config
 $VyOSReset = @"
+`n
 restart vpn
 run show ipsec vpn sa
 `n

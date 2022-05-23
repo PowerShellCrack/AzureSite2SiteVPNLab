@@ -9,6 +9,8 @@ Param(
 #============================================
 $IgnoreISECheck = $False #PowerShell ISE has issues with prompting for password during VYOS setup. Recommend running in PowerShell or VSCode.
 
+$AzureGov = $false # changing to true, will use the Azure environment for gov
+
 $LabPrefix = 'Contoso' #identifier for names in lab
 
 $domain = 'contoso.com' #just a name for now (no DC install....yet)
@@ -37,7 +39,7 @@ $DHCPLocation = 'router'   #defaults to DHCP server not on router; assumes DHCP 
 #$DHCPLocation = '<IP, server, or router>'   #defaults to DHCP server not on router; assumes DHCP is on a server
                                             #if <router> is specified, DHCP server will be enabled and a full DHCP scope will be built for each subnets automatically (eg. 10.22.1.1-10.22.1.255)
 
-$DNSServer = '<IP, IP addresses (comma separated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available IP for VM
+$DNSServers = '<IP, IP addresses (comma separated), router>'   #if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available IP for VM
                                                                 # if <router> is specified; google IP 8.8.8.8 will be used since no DNS server role exist on router
 
 $HyperVVMLocation = '<default>' #Leave as <default> for auto detect
@@ -206,7 +208,7 @@ If($null -eq $scriptRoot){
 . "$FunctionPath\azure.ps1"
 #endregion
 
-Write-Host "Processed functions. Loading configuration data..." -ForegroundColor Cyan
+Write-Host "Done" -ForegroundColor Green
 
 #check if SSH and SCP exist for automation mode to work
 If(-Not(Test-Command ssh) -and -Not(Test-Command scp) -and -Not(Test-Command ssh-keygen) )
@@ -267,32 +269,46 @@ If(!$NoAzureCheck){
         Write-Host "Done" -ForegroundColor Green
     }
 
+    #get azure context
+    $Context = Get-AzContext -ErrorAction Stop
+
     Try{
-        #grab current AZ resources
-        $Context = Get-AzContext -ErrorAction Stop
+        #if no context assume not connected to Azure
+        If($null -eq $Context){
+            If($AzureGov){Connect-AzAccount -EnvironmentName AzureUSGovernment -Force}
+            Else{Connect-AzAccount -Force}
+        }
+        #if context is not connected to gov; reconnect
+        ElseIf ($AzureGov -and $Context.Environment.Name -ne 'AzureUSGovernment'){
+            Clear-AzDefault -ErrorAction Stop -Force
+            Clear-AzContext -ErrorAction Stop -Force
+            Disconnect-AzAccount -ErrorAction Stop
+            Connect-AzAccount -EnvironmentName AzureUSGovernment -Force
+        }
     }
     Catch{
         Write-host ("Failed to get Azure context. {0}" -f $_.Exception.Message) -ForegroundColor yellow
         Clear-AzDefault -ErrorAction SilentlyContinue -Force
         Clear-AzContext -ErrorAction SilentlyContinue -Force
         Disconnect-AzAccount -ErrorAction SilentlyContinue
+        #reconnect
+        If($AzureGov){Connect-AzAccount -EnvironmentName AzureUSGovernment -Force}
+        Else{Connect-AzAccount -Force}
     }
     Finally{
-        If($null -eq $Context){
-            Connect-AzAccount -Force
-        }
         If($null -eq $Global:AzSubscription){
             $Global:AzSubscription = Get-AzSubscription -WarningAction SilentlyContinue | Out-GridView -PassThru -Title "Select a valid Azure Subscription" | Select-AzSubscription -WarningAction SilentlyContinue
             Set-AzContext -Tenant $Global:AzSubscription.Tenant.id -SubscriptionId $Global:AzSubscription.Subscription.id | Out-Null
         }
         Write-Host ("Using Account ID:   ") -ForegroundColor White -NoNewline
-            Write-Host ("{0}" -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
+        Write-Host ("{0}" -f $Global:AzSubscription.Account.Id) -ForegroundColor Green
         Write-Host ("Using Tenant ID:    ") -ForegroundColor White -NoNewline
-            Write-Host ("{0}" -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
+        Write-Host ("{0}" -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
         Write-host ("Using Subscription: ") -ForegroundColor White -NoNewline
-            Write-Host ("{0}" -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
+        Write-Host ("{0}" -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
     }
 }
+
 #endregion
 
 If(Test-IsISE){
@@ -412,6 +428,7 @@ If(!$NoVyosISOCheck){
 #============================================
 # CONFIGURATIONS
 #============================================
+Write-Host "Building configuration data..." -NoNewline
 #region Hyper-V Configurations
 #------------------------------
 $HyperVConfig = @{
@@ -479,9 +496,9 @@ $VyOSConfig = @{
 
 #build DNS server list
 $VyOSConfig['InternalDNSIP']  = @()
-$DNSServers = @()
-$DNSServers = $DNSServer.split(',')
-Foreach ($Dns in $DNSServers)
+$DNSServersArray = @()
+$DNSServersArray = $DNSServers.split(',')
+Foreach ($Dns in $DNSServersArray)
 {
     If(Test-IPAddress $Dns){
         $VyOSConfig['InternalDNSIP'] += $Dns
@@ -489,7 +506,7 @@ Foreach ($Dns in $DNSServers)
 }
 #incase there is no valid DNS IP's add fourth IP (we need at least one for router)
 If($VyOSConfig['InternalDNSIP'].count -eq 0){
-    If($DNSServer -match 'Router'){$DNStoAdd = '8.8.8.8'}Else{$DNStoAdd = $FourthIp}
+    If($DNSServers -match 'Router'){$DNStoAdd = '8.8.8.8'}Else{$DNStoAdd = $FourthIp}
     If($FourthIp -notin $VyOSConfig['InternalDNSIP']){
         $VyOSConfig['InternalDNSIP'] += $DNStoAdd
     }
@@ -570,6 +587,11 @@ $AzureSimpleConfig = @{
 }
 #endregion
 
+#update location if running gov
+If($AzureGov){
+    $AzureSimpleConfig['LocationName'] = 'usgovvirginia'
+    $AzureSimpleConfig['TunnelDescription'] = ('Gateway to ' + $RegionName + ' in Azure Gov').Replace('-',' ')
+}
 
 #region Virtual Machine Configurations
 #-------------------------------------------
@@ -654,7 +676,11 @@ $AzureAdvConfigSiteA = @{
 
     StorageAccountName = ($RegionAName).Replace(" ",'').ToLower() + '-sa'
 }
-
+#update location if running gov
+If($AzureGov){
+    $AzureAdvConfigSiteA['LocationName'] = 'usgovvirginia'
+    $AzureAdvConfigSiteA['TunnelDescription'] = ('Gateway to ' + $RegionAName + ' in Azure Gov').Replace('-',' ')
+}
 
 # Virtual Machine Configurations - Region 1
 #-------------------------------------------
@@ -695,7 +721,7 @@ $RegionBName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteBId).ToLower()
 
 #Static Properties [EDIT ALLOWED]
 $AzureAdvConfigSiteB = @{
-    LocationName = 'East US 2'
+    LocationName = 'West US'
 
     ResourceGroupName = $RegionBName + '-rg'
 
@@ -707,9 +733,9 @@ $AzureAdvConfigSiteB = @{
 
     VnetGatewayIpConfigName = $RegionBName + '-gateway-ipconfig'
 
-    VnetHubName = $RegionAName + '-Hub-vnet'
-    VnetHubCIDRPrefix = $AzureSiteAHubCIDR
-    VnetHubSubnetName = $RegionAName + '-hub-subnet'
+    VnetHubName = $RegionBName + '-Hub-vnet'
+    VnetHubCIDRPrefix = $AzureSiteBHubCIDR
+    VnetHubSubnetName = $RegionBName + '-hub-subnet'
     VnetHubSubnetAddressPrefix = $SubnetsFromAzureSiteBHubCIDR[0]
     VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureSiteBHubCIDR[-56] -replace '/\d+$', '/26')
 
@@ -732,6 +758,12 @@ $AzureAdvConfigSiteB = @{
     TunnelDescription = ('Gateway to ' + $RegionBName + ' in Azure').Replace("-",' ')
 
     StorageAccountName = ($RegionBName).Replace(" ",'').ToLower() + '-sa'
+}
+
+#update location if running gov
+If($AzureGov){
+    $AzureAdvConfigSiteB['LocationName'] = 'usgovarizona'
+    $AzureAdvConfigSiteB['TunnelDescription'] = ('Gateway to ' + $RegionBName + ' in Azure Gov').Replace('-',' ')
 }
 
 # Virtual Machine Configurations - Region 2
@@ -781,3 +813,4 @@ $AzureAdvConfigSiteAtoBConn= @{
 }
 
 #endregion
+Write-Host "Done" -ForegroundColor Green

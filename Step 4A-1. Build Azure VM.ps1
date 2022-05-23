@@ -17,6 +17,9 @@
         9. Set Autoshutdown
         10. Join Domain (optional)
 
+    .PARAMETER ConfigurationFile
+    STRING
+
     .PARAMETER VMName
     STRING
     Specifies an custom VM name; if already found increments name by 1
@@ -64,16 +67,39 @@
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
 
+    .EXAMPLE
+
+    & '.\Step 4A-1. Build Azure VM.ps1' -ConfigurationFile configs-gov.ps1 -VMName CONTOSO-WK1 -OSType Workstation
+
+    RESULT: Builds a Windows 10 VM named CONTOSO-WK1 in Azure Gov
 #>
 [CmdletBinding(DefaultParameterSetName = 'Workgroup')]
 Param(
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1",
+
     [ValidatePattern("^(?![0-9]{1,64}$)[a-zA-Z0-9-]{1,64}$")]
     [string]$VMName,
 
     [ValidateSet('Workstation', 'Server')]
     [string]$OSType = 'Server',
 
-    [Parameter(ParameterSetName = 'JoinDomain')]
     [switch]$SecureVM,
 
     [Parameter(ParameterSetName = 'JoinDomain')]
@@ -101,12 +127,12 @@ Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
 
@@ -286,7 +312,7 @@ If($OSType){
             $VMConfig = Set-AzVMSourceImage -VM $VMConfig `
                 -PublisherName 'MicrosoftWindowsServer' `
                 -Offer 'WindowsServer' `
-                -Skus '2016-Datacenter' `
+                -Skus '2019-datacenter-gensecond' `
                 -Version latest
         }
     }
@@ -341,7 +367,7 @@ If($SecureVM){
     If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
         Write-Host ("Creating Azure Keyvault [{0}]..." -f $KeyVaultName) -ForegroundColor White -NoNewline
         Try{
-            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location eastus -EnabledForDiskEncryption | Out-Null
+            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName -Location $AzureSimpleConfig.LocationName -EnabledForDiskEncryption | Out-Null
             Write-Host "Done" -ForegroundColor Green
         }
         Catch{
