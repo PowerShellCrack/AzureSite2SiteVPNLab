@@ -16,16 +16,24 @@
         7. attach public ip to gateway
         8. Create the VPN gateway
         9. Create the local network gateway
-        10. Create the VPN connection
-        11. Build VyOS VPN Configuration
-        12. Applies VyOS configurations
-        13. Check VPN connection
+        10. Update gateway transit in peering
+        11. Create the VPN connection
+        12. Build VyOS VPN Configuration
+        13. Applies VyOS configurations
+        14. Check VPN connection
+
+        TODO:
+        - Build Policy based tunneling: https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-connect-multiple-policybased-rm-ps
+        - Clean routes in vyos before adding
+        - Add Routetable in azure back to onprem
 
     .PARAMETER ConfigurationFile
     STRING
 
-    .EXAMPLE
+    .PARAMETER SkipVYOSSetup
+    switch
 
+    .EXAMPLE
     & '.\Step 3B-2. Build Azure Advanced S2S - Region 2.ps1 -ConfigurationFile configs-gov.ps1
 #>
 param(
@@ -38,7 +46,6 @@ param(
                 $commandAst,
                 $fakeBoundParameters )
 
-
         $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
 
         $Configs | Where-Object {
@@ -47,7 +54,9 @@ param(
 
     } )]
     [Alias("config")]
-    [string]$ConfigurationFile = "configs.ps1"
+    [string]$ConfigurationFile = "configs.ps1",
+
+    [switch]$SkipVYOSSetup
 )
 
 $ErrorActionPreference = "Stop"
@@ -134,6 +143,24 @@ If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteB.VnetHubName -Re
                             -Location $AzureAdvConfigSiteB.LocationName -AddressPrefix $AzureAdvConfigSiteB.VnetHubCIDRPrefix
         #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteB.VnetHubSubnetAddressPrefix | Out-Null
+        <#
+        If($AddAzFirewall){
+            $SubnetConfigSplat = @{
+                Name='GatewaySubnet'
+                VirtualNetwork=$vNetA
+                AddressPrefix=$AzureAdvConfigSiteB.VnetHubSubnetGatewayAddressPrefix
+                RouteTable=$GatewayRouteTable
+            }
+        }
+        Else{
+            $SubnetConfigSplat = @{
+                Name='GatewaySubnet'
+                VirtualNetwork=$vNetA
+                AddressPrefix=$AzureAdvConfigSiteB.VnetHubSubnetGatewayAddressPrefix
+            }
+        }
+        #>
+        #Add-AzVirtualNetworkSubnetConfig @SubnetConfigSplat | Out-Null
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteB.VnetHubSubnetGatewayAddressPrefix | Out-Null
 
         #Add DNS Server to Vnet
@@ -499,9 +526,9 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) tunnel $($i) remote prefix '
     $i++
 }
 
-@"
-`n
 #Default route and blackhole route for BGP and set private ASN number
+$VyOSFinal += @"
+`n
 set protocols static route 0.0.0.0/0 next-hop '$($VyOSConfig.NextHopSubnet)'
 "@
 
@@ -511,6 +538,7 @@ foreach ($SubnetRoute in $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix){
 set protocols static route '$($SubnetRoute)' next-hop '$($azpip.IpAddress)'
 "@
 }
+
 If($UseBGP){
     $VyOSFinal += @"
 `n
@@ -542,6 +570,13 @@ If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
 set nat source rule 100 outbound-interface eth0
 set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
 set nat source rule 100 translation address masquerade
+"@
+}
+
+If($VyOSConfig.ResetVPNConfigs){
+    $VyOSFinal += @"
+`n
+reset vpn ipsec-peer $($azpip.IpAddress) tunnel 1
 "@
 }
 
@@ -667,6 +702,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 Else{
     $RunManualSteps = $true
 }
+
 
 If($RunManualSteps){
     #Output information need for local router

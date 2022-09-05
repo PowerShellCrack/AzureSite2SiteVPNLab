@@ -5,8 +5,6 @@
     .DESCRIPTION
         Sets up Site 2 Site VPN in Azure Region 1 using hub and spoke design
 
-
-
     .NOTES
         1. Gets new share key
         2. Retrieves VyOS external IP
@@ -24,7 +22,6 @@
         13. Applies VyOS configurations
         14. Check VPN connection
 
-
         TODO:
         - Build Policy based tunneling: https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-connect-multiple-policybased-rm-ps
         - Clean routes in vyos before adding
@@ -37,7 +34,6 @@
     switch
 
     .EXAMPLE
-
     & '.\Step 3B-1. Build Azure Advanced S2S - Region 1.ps1 -ConfigurationFile configs-gov.ps1
 #>
 param(
@@ -50,7 +46,6 @@ param(
                 $commandAst,
                 $fakeBoundParameters )
 
-
         $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
 
         $Configs | Where-Object {
@@ -59,7 +54,7 @@ param(
 
     } )]
     [Alias("config")]
-    [string]$ConfigurationFile = "configs.ps1"
+    [string]$ConfigurationFile = "configs.ps1",
 
     [switch]$SkipVYOSSetup
 )
@@ -139,27 +134,6 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteA.ResourceGroupName -ErrorA
 }
 #endregion
 
-
-<#
-# Add firewall
-$Bastionsub = New-AzVirtualNetworkSubnetConfig -Name AzureBastionSubnet -AddressPrefix 10.0.0.0/27
-$FWsub = New-AzVirtualNetworkSubnetConfig -Name AzureFirewallSubnet -AddressPrefix 10.0.1.0/26
-$Worksub = New-AzVirtualNetworkSubnetConfig -Name Workload-SN -AddressPrefix 10.0.2.0/24
-
-
-# Add routes to firewall
-$GatewayRouteTable = New-AzRouteTable -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -Name 'gateway-rt'
-Add-AzRouteConfig -Name 'gateway-to-firewall' -AddressPrefix $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix -RouteTable $GatewayRouteTable `
-            -NextHopType VirtualAppliance -NextHopIpAddress PRIVATE_IP_VM
-
-#
-$SpokeRouteTable = New-AzRouteTable -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName -Name 'spoke-rt'
-Add-AzRouteConfig -Name 'spoke-to-firewall' -AddressPrefix 0.0.0.0/0 -RouteTable $SpokeRouteTable -NextHopType VirtualAppliance -NextHopIpAddress PRIVATE_IP_VM
-
-
-#>
-
-
 #region 2. Create virtual network A
 If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
@@ -169,7 +143,6 @@ If(-Not($vNetA = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -Re
                             -Location $AzureAdvConfigSiteA.LocationName -AddressPrefix $AzureAdvConfigSiteA.VnetHubCIDRPrefix
         #Create a subnet configuration for the hub network or gateway subnet (Vnet A)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteA.VnetHubSubnetName -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetAddressPrefix | Out-Null
-
         <#
         If($AddAzFirewall){
             $SubnetConfigSplat = @{
@@ -210,20 +183,8 @@ Else{
 }
 #endregion
 
-<#
-# Add Bastion host
-$vNet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName
-$publicip = New-AzPublicIpAddress -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -Location $AzureAdvConfigSiteA.LocationName `
-                    -Name bastion-pip -AllocationMethod static -Sku standard
-
-New-AzBastion -ResourceGroupName Test-FW-RG -Name Bastion-01 -PublicIpAddress $publicip -VirtualNetwork $vNet
-
-#>
-
 
 #region 3. Create virtual network B
-#TODO
-#build subnet loop to incorporate multiple subnets
 If(-Not($vNetB = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetSpokeName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
     Write-Host ("Creating Azure spoke virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -ForegroundColor White -NoNewline
@@ -254,26 +215,6 @@ Else{
 }
 #endregion
 
-
-<# Check DNS Server
-Try{
-    Write-Host (Adding DNS servers virtual network [{0}]..." -f $AzureAdvConfigSiteA.VnetSpokeName) -ForegroundColor White -NoNewline
-    Foreach($DNSIP in $VyOSConfig['InternalDNSIP']){
-        #add dns servers to vnet
-        If($DNSIP -notin $vNetB.DhcpOptions.DnsServers){
-            $vNetB.DhcpOptions.DnsServers += $DNSIP
-        }
-    }
-    Write-Host "Done" -ForegroundColor Green
-}
-Catch{
-    Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
-    Break
-}
-Finally{
-    Set-AzVirtualNetwork -VirtualNetwork $vNetB | Out-Null
-}
-#>
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
@@ -374,6 +315,7 @@ Else{
     Write-Host ("Using Azure virtual network gateway [{0}]" -f $AzureAdvConfigSiteA.VnetGatewayName) -ForegroundColor Green
 }
 #endregion
+
 
 #region 8. Setup LNG connection
 $LNGBGPParams=@{}
@@ -494,6 +436,9 @@ Elseif( $null -eq $currentGwConnection)
 Else{
     Write-Host ("Gateway is not connected! ") -ForegroundColor Red -NoNewline
     If($VyOSConfig['ResetVPNConfigs'] -eq $false){
+        Write-Host "==========================================" -ForegroundColor Black -BackgroundColor Red
+        Write-Host " WARNING THIS WILL BREAK OTHER S2S CONFIGS" -ForegroundColor Black -BackgroundColor Red
+        Write-Host "==========================================" -ForegroundColor Black -BackgroundColor Red
         $ReconfigureVpn = Read-host "Would you like to re-run the router configurations? [Y or N]"
     }
     If( ($ReconfigureVpn -eq 'Y') -or ($VyOSConfig['ResetVPNConfigs'] -eq $true) )
@@ -616,7 +561,6 @@ set nat source rule $($RuleID) outbound-interface 'eth0'
 set nat source rule $($RuleID) source address '$($VyOSConfig.LocalCIDRPrefix)'
 "@
 }
-
 
 #If reset is true, all NAT configs will be delete; need to re-add this one
 If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
@@ -758,8 +702,6 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 Else{
     $RunManualSteps = $true
 }
-
-
 
 
 If($RunManualSteps){
