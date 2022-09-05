@@ -386,12 +386,16 @@ Function Get-MyPublicIP{
     #hashtable is: "dns name = property"
     #eg.
     $RestAPIUrls = @{
+        "https://api.hostip.info/get_json.php"='ip'
         "http://ipinfo.io/json"='ip'
         "myexternalip.com/raw"=''
         "ident.me"=''
         "api.ipify.org"=''
         "ipecho.net/plain"=''
         "ifconfig.me/ip"=''
+        "12.io"=""
+        "checkip.amazonaws.com"=""
+        "ip.seeip.org"=""
     }
 
     If($DynamicDns)
@@ -423,6 +427,6 @@ Function Get-MyPublicIP{
                     Return $Response
                 }
             }
-        }
+        }#end loop
     }
 }

@@ -60,6 +60,8 @@ param(
     } )]
     [Alias("config")]
     [string]$ConfigurationFile = "configs.ps1"
+
+    [switch]$SkipVYOSSetup
 )
 
 $ErrorActionPreference = "Stop"
@@ -341,7 +343,6 @@ $gwipconfig = New-AzVirtualNetworkGatewayIpConfig -Name $AzureAdvConfigSiteA.Vne
 
 #region 7. Create the VPN gateway
 #Check to see if public IP is attached to VNG
-If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteA.VnetGatewayName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue).IpConfigurations.PublicIpAddress.id )
 {
     Write-host ("Building Azure virtual network gateway [{0}], this can take up to 45 minutes..." -f $AzureAdvConfigSiteA.VnetGatewayName) -ForegroundColor White -NoNewline
