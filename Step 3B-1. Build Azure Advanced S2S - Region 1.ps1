@@ -722,8 +722,8 @@ run show ipsec vpn sa
 
 #Always output script
 $ScriptName = $LogfileName.replace('.log','.script')
-Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
-$VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
+Remove-Item "$ResourcePath\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
+$VyOSFinal | Add-Content "$ResourcePath\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
 If($RouterAutomationMode)
@@ -859,7 +859,7 @@ If($RunManualSteps){
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName) by running command [" -ForegroundColor White -NoNewline
     Write-Host ("ssh vyos@{0}" -f $VyOSExternalIP) -ForegroundColor Yellow -NoNewline
     Write-Host "]" -ForegroundColor White
-    Write-Host "Then copy the script between the lines or `n from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor White
+    Write-Host "Then copy the script between the lines or `n from $ResourcePath\Logs\$ScriptName" -ForegroundColor White
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
     Write-Host "In router's ssh session, run command [" -ForegroundColor Gray -NoNewline
     Write-Host "reboot now" -ForegroundColor Yellow -NoNewline

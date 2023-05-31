@@ -62,6 +62,7 @@ param(
 $ErrorActionPreference = "Stop"
 #Requires -Modules Az.Accounts,Az.Resources,Az.Network
 Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true" | Out-Null
+[string]$ResourcePath = ($PWD.ProviderPath, $PSScriptRoot)[[bool]$PSScriptRoot]
 
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
@@ -71,14 +72,14 @@ If($PSScriptRoot.ToString().length -eq 0)
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\$ConfigurationFile" -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$ResourcePath\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$ResourcePath\$ConfigurationFile" -NoVyosISOCheck
 }
 #endregion
 
 #region start transcript
 $LogfileName = "$RegionBName-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
-Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
+Try{Start-transcript "$ResourcePath\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$ResourcePath\$LogfileName"}
 #endregion
 
 #Make it a global variable so it used for the entire session
@@ -667,8 +668,8 @@ run show ipsec vpn sa
 
 #Always output script
 $ScriptName = $LogfileName.replace('.log','.script')
-Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
-$VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
+Remove-Item "$ResourcePath\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
+$VyOSFinal | Add-Content "$ResourcePath\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
 If($RouterAutomationMode)
@@ -803,7 +804,7 @@ If($RunManualSteps){
     Write-Host "`nOpen ssh session for $($VyOSConfig.VMName) by running command [" -ForegroundColor White -NoNewline
     Write-Host ("ssh vyos@{0}" -f $VyOSExternalIP) -ForegroundColor Yellow -NoNewline
     Write-Host "]" -ForegroundColor White
-    Write-Host "Then copy the script between the lines or `n from $PSScriptRoot\Logs\$ScriptName" -ForegroundColor White
+    Write-Host "Then copy the script between the lines or `n from $ResourcePath\Logs\$ScriptName" -ForegroundColor White
     Write-Host "`nA reboot may be required on $($VyOSConfig.VMName) for updates to take effect" -ForegroundColor Red
     Write-Host "In router's ssh session, run command [" -ForegroundColor Gray -NoNewline
     Write-Host "reboot now" -ForegroundColor Yellow -NoNewline
