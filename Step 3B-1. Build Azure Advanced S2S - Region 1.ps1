@@ -187,6 +187,27 @@ If(-Not($HubVnet = Get-AzVirtualNetwork -Name $AzureAdvConfigSiteA.VnetHubName -
         #Add-AzVirtualNetworkSubnetConfig @SubnetConfigSplat | Out-Null
         Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $vNetA -AddressPrefix $AzureAdvConfigSiteA.VnetHubSubnetGatewayAddressPrefix | Out-Null
 
+        #Add DNS Server to Vnet
+        If($VyOSConfig['InternalDNSIP'].count -gt 0){
+            $vNetA.DhcpOptions.DnsServers += $VyOSConfig['InternalDNSIP']
+        }
+
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+    Finally{
+        Set-AzVirtualNetwork -VirtualNetwork $vNetA | Out-Null
+    }
+}
+Else{
+    Write-Host ("Using Azure hub virtual network [{0}]" -f $AzureAdvConfigSiteA.VnetHubName) -ForegroundColor Green
+}
+#endregion
+
+
 
 If($AzureAdvConfigSiteA.DeployBastionHost -and -Not(Get-AzBastion -Name $AzureAdvConfigSiteA.BastionHostName -ResourceGroupName $AzureAdvConfigSiteA.ResourceGroupName -ErrorAction SilentlyContinue)){
     Write-Host ("Creating Bastion Host [{0}] for hub subnet [{1}]..." -f $AzureAdvConfigSiteA.BastionHostName,$AzureAdvConfigSiteA.VnetHubName) -ForegroundColor White -NoNewline
@@ -690,9 +711,9 @@ If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
     $VyOSLanCmd += @"
 `n
 #Enable NAT Configuration
-set nat source rule 100 outbound-interface eth0
-set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
-set nat source rule 100 translation address masquerade
+set nat source rule 300 outbound-interface eth0
+set nat source rule 300 source address '$($VyOSConfig.LocalCIDRPrefix)'
+set nat source rule 300 translation address masquerade
 "@
 }
 

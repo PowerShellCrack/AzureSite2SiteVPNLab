@@ -636,9 +636,9 @@ If($VyOSConfig.EnableNAT -and $VyOSConfig.ResetVPNConfigs){
     $VyOSLanCmd += @"
 `n
 #Enable NAT Configuration
-set nat source rule 100 outbound-interface eth0
-set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
-set nat source rule 100 translation address masquerade
+set nat source rule 300 outbound-interface eth0
+set nat source rule 300 source address '$($VyOSConfig.LocalCIDRPrefix)'
+set nat source rule 300 translation address masquerade
 "@
 }
 
