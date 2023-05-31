@@ -188,6 +188,73 @@ Else{
 }
 #endregion
 
+If(-Not($VNetBNsg = Get-AzNetworkSecurityGroup -Name $AzureAdvConfigSiteB.NSGSpokeName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue))
+{
+    Write-Host ("Creating Azure spoke network security group [{0}]..." -f $AzureAdvConfigSiteB.NSGSpokeName) -ForegroundColor White -NoNewline
+    Try{
+        $rule1 = New-AzNetworkSecurityRuleConfig -Name 'AllowAllOnpremTraffic' -Description "Allow all On-Premise traffic" `
+                        -Access Allow -Protocol Tcp -Direction Inbound -Priority 4000 
+                        -SourceAddressPrefix $OnPremSubnetCIDR -SourcePortRange * `
+                        -DestinationAddressPrefix * -DestinationPortRange *
+        <#
+        $rule2 = New-AzNetworkSecurityRuleConfig -Name web-rule -Description "Allow HTTP" `
+                        -Access Allow -Protocol Tcp -Direction Inbound -Priority 4001 `
+                        -SourceAddressPrefix $OnPremSubnetCIDR -SourcePortRange * `
+                        -DestinationAddressPrefix * -DestinationPortRange 80, 443
+        #>
+        $VNetBNsg = New-AzNetworkSecurityGroup -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
+                        -Location $AzureAdvConfigSiteB.LocationName `
+                        -Name $AzureAdvConfigSiteB.NSGSpokeName -SecurityRules $rule1 #,$rule2
+
+        #We associate the nsg to the subnet
+        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName `
+                        -VirtualNetwork $vNetB -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix[0] `
+                        -NetworkSecurityGroup $VNetBNsg
+
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+    Finally{
+        #Update our virtual network 
+        #$vNetB | Set-AzVirtualNetwork
+        Set-AzVirtualNetwork -VirtualNetwork $vNetB | Out-Null
+    }
+}
+Else{
+    Write-Host ("Using Azure network security group [{0}]" -f $AzureAdvConfigSiteB.NSGSpokeName) -ForegroundColor Green
+}
+#endregion
+
+#region 3. Create Storage account for network troubleshooting
+If(-Not($StorageAccount = Get-AzStorageAccount -Name $AzureAdvConfigSiteB.StorageAccountName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+
+    Write-Host ("Creating Azure storage account [{0}]..." -f $AzureAdvConfigSiteB.StorageAccountName) -ForegroundColor White -NoNewline
+    Try{
+        $StorageAccount = New-AzStorageAccount -Name $AzureAdvConfigSiteB.StorageAccountName `
+                            -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
+                            -SkuName $AzureAdvConfigSiteB.StorageSku `
+                            -Location $AzureAdvConfigSiteB.LocationName -Kind Storage | Out-Null
+
+        #create container
+        [System.Object[]]$currentStorageAccountKeys = Get-AzStorageAccountKey -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureAdvConfigSiteB.StorageAccountName
+        $ctx = New-AzStorageContext -StorageAccountName $AzureAdvConfigSiteB.StorageAccountName -StorageAccountKey $currentStorageAccountKeys.value[0]
+        New-AzStorageContainer -Name 'connection-network-logs' -Context $ctx | Out-Null
+        
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+Else{
+    Write-Host ("Using Azure storage account [{0}]" -f $StorageAccount.StorageAccountName) -ForegroundColor Green
+}
+#endregion
+
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
@@ -209,6 +276,7 @@ Else{
     Write-Host ("Peering between Hub [{0}] and spoke [{1}] is already setup" -f $AzureAdvConfigSiteB.VnetPeerNameAB,$AzureAdvConfigSiteB.VnetPeerNameBA) -ForegroundColor Green
 }
 #endregion
+
 
 
 #get vnet and gateway subnet
@@ -477,7 +545,7 @@ set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication mode 'pre-sha
 set vpn ipsec site-to-site peer $($azpip.IpAddress) authentication pre-shared-secret '$($Global:RegionBSharedPSK)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) connection-type 'initiate'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) default-esp-group 'azure'
-set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureAdvConfigSiteB.TunnelDescription) ($($AzureAdvConfigSiteB.LocationName))'
+set vpn ipsec site-to-site peer $($azpip.IpAddress) description '$($AzureAdvConfigSiteB.TunnelDescription)'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ike-group 'azure-ike'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) ikev2-reauth 'inherit'
 set vpn ipsec site-to-site peer $($azpip.IpAddress) local-address '$($VyOSExternalIP)'
@@ -642,24 +710,32 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
         Else{
             Write-Host ("{0}" -f $currentGwConnection.ConnectionStatus) -ForegroundColor Red
-            $ResetVpn = Read-host "Would you like to attempt to reset the VPN connection? [Y or N]"
-            If($ResetVpn -eq 'Y'){
-                Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteB.ConnectionName `
-                        -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Value $Global:RegionBSharedPSK -Force | Out-Null
+            $ResetVpnPrompt = Read-host "Would you like to attempt to repair the VPN connection? [Y or N]"
+            If($ResetVpnPrompt -eq 'Y' -or $ResetVpnPrompt -eq 'yes'){
+                Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteB.ConnectionName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName | 
+                    Set-AzVirtualNetworkGatewayConnection -Force | Out-Null
 
-                Reset-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteB.ConnectionName `
-                        -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Force | Out-Null
-                Start-Sleep 10
-                $VyOSVpnResetScript = New-VyattaScript -Value $VyOSVpnReset -AsObject
-                #TEST $VyOSFinalScript.value
-                New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
+                $currentGwConnection = Get-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteB.ConnectionName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
+                If($currentGwConnection.ConnectionStatus -eq "Connected")
+                {
+                    Write-Host ("Resetting Preshared Key...") -ForegroundColor White -NoNewline
+                    Set-AzVirtualNetworkGatewayConnectionSharedKey -Name $AzureAdvConfigSiteB.ConnectionName `
+                            -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Value $Global:RegionASharedPSK -Force | Out-Null
 
-                $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSVpnResetScript.Path -Verbose
-                If(!$Result){
-                    Write-Host "The reset may have failed on vyos router; check vpn status and use manual process if necessary" -ForegroundColor Red
+                    Reset-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteB.ConnectionName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Force | Out-Null
+                    Write-Host ("Done") -ForegroundColor Green
+                    Start-Sleep 10
+                    $VyOSVpnResetScript = New-VyattaScript -Value $VyOSVpnReset -AsObject
+                    #TEST $VyOSFinalScript.value
+                    New-SSHSharedKey -IP $VyOSExternalIP -User 'vyos' -Verbose
+
+                    $Result = Invoke-VyattaScript -IP $VyOSExternalIP -Path $VyOSVpnResetScript.Path -Verbose
+                    
+                    If(!$Result){
+                        Write-Host "The reset may have failed on vyos router; check vpn status and use manual process if necessary" -ForegroundColor Black -BackgroundColor Red
+                    }
                 }
             }
-            $RunManualSteps = $true
         }
     }
     #endregion

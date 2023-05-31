@@ -98,7 +98,7 @@ Function New-SSHSharedKey{
             Set-Acl -Path "$env:USERPROFILE/.ssh" -AclObject $acl
 
             Get-ChildItem "$env:USERPROFILE/.ssh" -Recurse | %{
-                $acl = (Get-Item $_.FullName).GetAccessControl('Access')
+                $acl = `Get-Acl $_.FullName
                 $acesToRemove = $acl.Access | ?{ $_.IsInherited -eq $false -and $_.IdentityReference -eq 'Everyone' }
                 If($acesToRemove){$acl.RemoveAccessRuleAll($acesToRemove)}
                 $acl.SetAccessRuleProtection($False,$true)

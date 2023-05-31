@@ -1,17 +1,39 @@
 ﻿#Requires -RunAsAdministrator
+param(
 
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1",
+
+    [bool]$NoVyosISOCheck = $true,
+    [bool]$NoAzureCheck = $true
+)
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoAzureCheck -NoVyosISOCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoAzureCheck -NoVyosISOCheck
 }
-#endregion
 
 #start transcript
 $LogfileName = "$LabPrefix-HyperVSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"

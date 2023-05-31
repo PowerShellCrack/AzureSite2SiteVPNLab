@@ -17,25 +17,41 @@
 
 #>
 #Requires -RunAsAdministrator
+param(
 
-Param(
+    [Parameter(Mandatory = $false)]
+    [ArgumentCompleter( {
+        param ( $commandName,
+                $parameterName,
+                $wordToComplete,
+                $commandAst,
+                $fakeBoundParameters )
+
+
+        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+
+        $Configs | Where-Object {
+            $_ -like "$wordToComplete*"
+        }
+
+    } )]
+    [Alias("config")]
+    [string]$ConfigurationFile = "configs.ps1",
+
+    [bool]$NoAzureCheck = $true,
     [switch]$SkipInitialSetup
 )
-
-#https://systemspecialist.net/2014/11/26/create-mini-router-with-hyper-v-for-vm-labs/
 #region Grab Configurations
 If($PSScriptRoot.ToString().length -eq 0)
 {
      Write-Host ("File not ran as script; Assuming its opened in ISE. ") -ForegroundColor Red
-     Write-Host ("    Run configuration file first (eg: . .\configs.ps1)") -ForegroundColor Yellow
+     Write-Host ("    Run configuration file first (eg: . .\$ConfigurationFile)") -ForegroundColor Yellow
      Break
 }
 Else{
-    Write-Host ("Loading {0}..." -f "$PSScriptRoot\configs.ps1") -ForegroundColor Yellow -NoNewline
-    . "$PSScriptRoot\configs.ps1" -NoAzureCheck
+    Write-Host ("Loading {0}..." -f "$PSScriptRoot\$ConfigurationFile") -ForegroundColor Yellow -NoNewline
+    . "$PSScriptRoot\$ConfigurationFile" -NoAzureCheck
 }
-#endregion
-
 
 #start transcript
 $LogfileName = "$LabPrefix-VYOSRouterSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
@@ -62,7 +78,7 @@ If(!$SkipInitialSetup -or !$VM){
             If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue ){
                 Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
             }
-            New-VHD -Path $VHDxFilePath -SizeBytes 2GB -Dynamic -ErrorAction stop | Out-Null
+            New-VHD -Path $VHDxFilePath -SizeBytes 3GB -Dynamic -ErrorAction stop | Out-Null
         }
         Catch{
             Write-Host ("Unable to manage VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
@@ -78,9 +94,15 @@ If(!$SkipInitialSetup -or !$VM){
                 -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled `
                 -DynamicMemory -ErrorAction Stop | Out-Null
             #Remove-VMCheckpoint -VMName $VyOSConfig.VMName -ErrorAction SilentlyContinue
-            #Connect ISO
-            Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
-
+            
+            #$FileName = Split-Path $VyOSConfig.ISOLocation -Leaf
+            #Copy-Item $VyOSConfig.ISOLocation -Destination "$env:temp\$FileName" -ErrorAction SilentlyContinue -Force |Out-Null
+            #Connect ISO 
+            If($VyOSConfig.ISOLocation -like '.*'){
+                Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path ($VyOSConfig.ISOLocation -replace '^.',$PSScriptRoot) -ErrorAction Stop
+            }Else{
+                Set-VMDvdDrive -VMName $VyOSConfig.VMName -Path $VyOSConfig.ISOLocation -ErrorAction Stop
+            }
             #$VmSwitchExternal = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
             #Get-VMNetworkAdapter -VMName $VyOSConfig.VMName | Connect-VMNetworkAdapter -SwitchName $VmSwitchExternal -ErrorAction Stop
         }
@@ -235,6 +257,7 @@ do {
 } until ( ($VyOSExternalIP -as [System.Net.IPAddress] -and $TestIP) -or ($ping -eq 10) )
 #endregion
 
+Write-Host "`nPreparing router for network configurations, please wait..." -ForegroundColor Yellow
 #region Add all internal networks to router
 Stop-VM $VyOSConfig.VMName -ErrorAction SilentlyContinue
 start-sleep 10
@@ -376,9 +399,9 @@ If($VyOSConfig.EnableNAT){
     $VyOSLanCmd += @"
 
 #Enable NAT Configuration
-set nat source rule 100 outbound-interface eth0
-set nat source rule 100 source address '$($VyOSConfig.LocalCIDRPrefix)'
-set nat source rule 100 translation address masquerade
+set nat source rule 300 outbound-interface eth0
+set nat source rule 300 source address '$($VyOSConfig.LocalCIDRPrefix)'
+set nat source rule 300 translation address masquerade
 "@
 }
 
@@ -414,10 +437,10 @@ If($RouterAutomationMode){
     }
     Else{
         #wait for VM to boot completely
-        Write-Host "Router is rebooting" -ForegroundColor Yellow -NoNewline
+        Write-Host "Router is rebooting..." -ForegroundColor Yellow -NoNewline
         do {
             Write-Host "." -ForegroundColor Yellow -NoNewline
-            Start-Sleep 3
+            Start-Sleep 1
         } until(Test-Connection $VyOSExternalIP -Count 1 -ErrorAction SilentlyContinue)
 
         Write-Host "Booted" -ForegroundColor Green
@@ -426,8 +449,8 @@ If($RouterAutomationMode){
         Write-Host "show int" -ForegroundColor Yellow -NoNewline
         Write-Host "]" -ForegroundColor Gray
         Write-Host "------------------------------------------" -ForegroundColor Gray
-        $LanInterfaces = Read-host "Are all interfaces configured with an ip address? [Y or N]"
-        If($LanInterfaces -eq 'Y'){
+        $VyosInterfacesPrompt = Read-host "Are all interfaces configured with an ip address? [Y or N]"
+        If($VyosInterfacesPrompt -eq 'y' -or $VyosInterfacesPrompt -eq 'yes'){
             Write-Host "====================================" -ForegroundColor Black -BackgroundColor Green
             Write-Host " Done configuring router interfaces " -ForegroundColor Black -BackgroundColor Green
             Write-Host "====================================" -ForegroundColor Black -BackgroundColor Green

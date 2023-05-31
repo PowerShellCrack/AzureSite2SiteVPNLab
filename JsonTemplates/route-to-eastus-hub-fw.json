@@ -1,0 +1,52 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "routeTables_route_to_eastus_hub_fw_name": {
+            "defaultValue": "route-to-eastus-hub-fw",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/routeTables",
+            "apiVersion": "2022-09-01",
+            "name": "[parameters('routeTables_route_to_eastus_hub_fw_name')]",
+            "location": "eastus",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/routeTables/routes', parameters('routeTables_route_to_eastus_hub_fw_name'), 'r-nexthop-to-fw')]"
+            ],
+            "properties": {
+                "disableBgpRoutePropagation": false,
+                "routes": [
+                    {
+                        "name": "r-nexthop-to-fw",
+                        "id": "[resourceId('Microsoft.Network/routeTables/routes', parameters('routeTables_route_to_eastus_hub_fw_name'), 'r-nexthop-to-fw')]",
+                        "properties": {
+                            "addressPrefix": "0.0.0.0/0",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "10.0.3.4",
+                            "hasBgpOverride": false
+                        },
+                        "type": "Microsoft.Network/routeTables/routes"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/routeTables/routes",
+            "apiVersion": "2022-09-01",
+            "name": "[concat(parameters('routeTables_route_to_eastus_hub_fw_name'), '/r-nexthop-to-fw')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/routeTables', parameters('routeTables_route_to_eastus_hub_fw_name'))]"
+            ],
+            "properties": {
+                "addressPrefix": "0.0.0.0/0",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIpAddress": "10.0.3.4",
+                "hasBgpOverride": false
+            }
+        }
+    ]
+}

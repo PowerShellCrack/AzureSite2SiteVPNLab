@@ -1,0 +1,113 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "firewallPolicies_fw_policies_eastus_name": {
+            "defaultValue": "fw-policies-eastus",
+            "type": "String"
+        },
+        "workspaces_la_hub_eastus_44a7aef4remm6_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.OperationalInsights/workspaces/la-hub-eastus-44a7aef4remm6",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/firewallPolicies",
+            "apiVersion": "2022-09-01",
+            "name": "[parameters('firewallPolicies_fw_policies_eastus_name')]",
+            "location": "eastus",
+            "properties": {
+                "sku": {
+                    "tier": "Standard"
+                },
+                "threatIntelMode": "Deny",
+                "threatIntelWhitelist": {
+                    "fqdns": [],
+                    "ipAddresses": []
+                },
+                "dnsSettings": {
+                    "servers": [],
+                    "enableProxy": true
+                },
+                "insights": {
+                    "isEnabled": true,
+                    "retentionDays": 30,
+                    "logAnalyticsResources": {
+                        "defaultWorkspaceId": {
+                            "id": "[parameters('workspaces_la_hub_eastus_44a7aef4remm6_externalid')]"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/firewallPolicies/ruleCollectionGroups",
+            "apiVersion": "2022-09-01",
+            "name": "[concat(parameters('firewallPolicies_fw_policies_eastus_name'), '/DefaultApplicationRuleCollectionGroup')]",
+            "location": "eastus",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/firewallPolicies', parameters('firewallPolicies_fw_policies_eastus_name'))]"
+            ],
+            "properties": {
+                "priority": 300,
+                "ruleCollections": [
+                    {
+                        "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
+                        "action": {
+                            "type": "Allow"
+                        },
+                        "rules": [],
+                        "name": "org-wide-allowed",
+                        "priority": 100
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/firewallPolicies/ruleCollectionGroups",
+            "apiVersion": "2022-09-01",
+            "name": "[concat(parameters('firewallPolicies_fw_policies_eastus_name'), '/DefaultNetworkRuleCollectionGroup')]",
+            "location": "eastus",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/firewallPolicies', parameters('firewallPolicies_fw_policies_eastus_name'))]"
+            ],
+            "properties": {
+                "priority": 200,
+                "ruleCollections": [
+                    {
+                        "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
+                        "action": {
+                            "type": "Allow"
+                        },
+                        "rules": [
+                            {
+                                "ruleType": "NetworkRule",
+                                "name": "DNS",
+                                "description": "Allow DNS outbound (for simplicity, adjust as needed)",
+                                "ipProtocols": [
+                                    "UDP"
+                                ],
+                                "sourceAddresses": [
+                                    "*"
+                                ],
+                                "sourceIpGroups": [],
+                                "destinationAddresses": [
+                                    "*"
+                                ],
+                                "destinationIpGroups": [],
+                                "destinationFqdns": [],
+                                "destinationPorts": [
+                                    "53"
+                                ]
+                            }
+                        ],
+                        "name": "org-wide-allowed",
+                        "priority": 100
+                    }
+                ]
+            }
+        }
+    ]
+}

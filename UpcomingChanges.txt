@@ -1,0 +1,37 @@
+WARNING: Upcoming breaking changes in the cmdlet 'Add-AzVirtualNetworkSubnetConfig' :
+Update Property Name
+Cmdlet invocation changes :
+    Old Way : -ResourceId
+    New Way : -NatGatewayId
+Update Property Name
+Cmdlet invocation changes :
+    Old Way : -InputObject
+    New Way : -NatGateway
+
+Note : Go to https://aka.ms/azps-changewarnings for steps to suppress this breaking change warning, and other information on breaking changes in Azure PowerShell.
+
+WARNING: Upcoming breaking changes in the cmdlet 'Add-AzVirtualNetworkSubnetConfig' :
+Update Property Name
+Cmdlet invocation changes :
+    Old Way : -ResourceId
+    New Way : -NatGatewayId
+Update Property Name
+Cmdlet invocation changes :
+:
+Update Property Name
+Cmdlet invocation changes :
+    Old Way : -ResourceId
+    New Way : -NatGatewayId
+Update Property Name
+Cmdlet invocation changes :
+    Old Way : -InputObject
+    New Way : -NatGateway
+
+Note : Go to https://aka.ms/azps-changewarnings for steps to suppress this breaking change warning, and other information on breaking changes in Azure PowerShell.
+
+WARNING: Upcoming breaking changes in the cmdlet 'New-AzPublicIpAddress' :
+Default behaviour of Zone will be changed
+Cmdlet invocation changes :
+    Old Way : Sku = Standard means the Standard Public IP is zone-redundant.
+    New Way : Sku = Standard and Zone = {} means the Standard Public IP has no zones. If you want to create a zone-redundant Public IP address, please specify all the zones in the region. For example, Zone = ['1', '2', '3'].
+It is recommended to use parameter '-Sku Standard' to create new IP address. Please note that it will become the default behavior for IP address creation in the future.Note : Go to https://aka.ms/azps-changewarnings for steps to suppress this breaking change warning, and other information on breaking changes in Azure PowerShell.

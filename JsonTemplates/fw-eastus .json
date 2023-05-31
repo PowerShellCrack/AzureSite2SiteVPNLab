@@ -1,0 +1,90 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "azureFirewalls_fw_eastus_name": {
+            "defaultValue": "fw-eastus",
+            "type": "String"
+        },
+        "publicIPAddresses_pip_fw_eastus_00_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.Network/publicIPAddresses/pip-fw-eastus-00",
+            "type": "String"
+        },
+        "virtualNetworks_vnet_eastus_hub_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.Network/virtualNetworks/vnet-eastus-hub",
+            "type": "String"
+        },
+        "publicIPAddresses_pip_fw_eastus_01_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.Network/publicIPAddresses/pip-fw-eastus-01",
+            "type": "String"
+        },
+        "publicIPAddresses_pip_fw_eastus_02_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.Network/publicIPAddresses/pip-fw-eastus-02",
+            "type": "String"
+        },
+        "firewallPolicies_fw_policies_eastus_externalid": {
+            "defaultValue": "/subscriptions/6c21d7aa-6b53-4aa5-8d0c-e877b0d47f84/resourceGroups/rg-dtolab-hubspoke-eastus-001/providers/Microsoft.Network/firewallPolicies/fw-policies-eastus",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/azureFirewalls",
+            "apiVersion": "2022-09-01",
+            "name": "[parameters('azureFirewalls_fw_eastus_name')]",
+            "location": "eastus",
+            "zones": [
+                "1",
+                "2",
+                "3"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "AZFW_VNet",
+                    "tier": "Standard"
+                },
+                "threatIntelMode": "Alert",
+                "additionalProperties": {},
+                "ipConfigurations": [
+                    {
+                        "name": "[concat('pip-', parameters('azureFirewalls_fw_eastus_name'), '-00')]",
+                        "id": "[concat(resourceId('Microsoft.Network/azureFirewalls', parameters('azureFirewalls_fw_eastus_name')), concat('/azureFirewallIpConfigurations/pip-', parameters('azureFirewalls_fw_eastus_name'), '-00'))]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[parameters('publicIPAddresses_pip_fw_eastus_00_externalid')]"
+                            },
+                            "subnet": {
+                                "id": "[concat(parameters('virtualNetworks_vnet_eastus_hub_externalid'), '/subnets/AzureFirewallSubnet')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[concat('pip-', parameters('azureFirewalls_fw_eastus_name'), '-01')]",
+                        "id": "[concat(resourceId('Microsoft.Network/azureFirewalls', parameters('azureFirewalls_fw_eastus_name')), concat('/azureFirewallIpConfigurations/pip-', parameters('azureFirewalls_fw_eastus_name'), '-01'))]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[parameters('publicIPAddresses_pip_fw_eastus_01_externalid')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[concat('pip-', parameters('azureFirewalls_fw_eastus_name'), '-02')]",
+                        "id": "[concat(resourceId('Microsoft.Network/azureFirewalls', parameters('azureFirewalls_fw_eastus_name')), concat('/azureFirewallIpConfigurations/pip-', parameters('azureFirewalls_fw_eastus_name'), '-02'))]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[parameters('publicIPAddresses_pip_fw_eastus_02_externalid')]"
+                            }
+                        }
+                    }
+                ],
+                "networkRuleCollections": [],
+                "applicationRuleCollections": [],
+                "natRuleCollections": [],
+                "firewallPolicy": {
+                    "id": "[parameters('firewallPolicies_fw_policies_eastus_externalid')]"
+                }
+            }
+        }
+    ]
+}
