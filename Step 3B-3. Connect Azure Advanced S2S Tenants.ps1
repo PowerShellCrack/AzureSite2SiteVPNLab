@@ -59,21 +59,21 @@ Else{
 
 
 #start transcript
-$LogfileName = "SiteAtoBConn-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "TenantAtoBConn-AdvSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 #endregion
 
 #get the Site A Gateway
-$gateway1 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteAtoBConn.VNetGatewayName1 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg1
+$gateway1 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantAtoBConn.VNetGatewayName1 -ResourceGroupName $AzureAdvConfigTenantAtoBConn.rg1
 
 #get the Site B Gateway
-$gateway2 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigSiteAtoBConn.VNetGatewayName2 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2
+$gateway2 = Get-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantAtoBConn.VNetGatewayName2 -ResourceGroupName $AzureAdvConfigTenantAtoBConn.rg2
 
 # Create the links (two are needed)
 Try{
-    Write-Host ("Building site-2-site gateway connection to second Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection12) -ForegroundColor White -NoNewline
-    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection12 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg1 `
-            -VirtualNetworkGateway1 $gateway1 -VirtualNetworkGateway2 $gateway2 -Location $AzureAdvConfigSiteAtoBConn.loc1 `
+    Write-Host ("Building site-2-site gateway connection to second Azure tenant gateway [{0}]" -f $AzureAdvConfigTenantAtoBConn.Connection12) -ForegroundColor White -NoNewline
+    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigTenantAtoBConn.Connection12 -ResourceGroupName $AzureAdvConfigTenantAtoBConn.rg1 `
+            -VirtualNetworkGateway1 $gateway1 -VirtualNetworkGateway2 $gateway2 -Location $AzureAdvConfigTenantAtoBConn.loc1 `
             -ConnectionType Vnet2Vnet -SharedKey $Global:SharedPSK -EnableBgp $UseBGP -RoutingWeight 10 | Out-Null
     Write-Host "Done" -ForegroundColor Green
 }
@@ -83,9 +83,9 @@ Catch{
 }
 
 Try{
-    Write-Host ("Building site-2-site gateway connection to first Azure tenant gateway [{0}]" -f $AzureAdvConfigSiteAtoBConn.Connection21) -ForegroundColor White -NoNewline
-    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigSiteAtoBConn.Connection21 -ResourceGroupName $AzureAdvConfigSiteAtoBConn.rg2 `
-            -VirtualNetworkGateway1 $gateway2 -VirtualNetworkGateway2 $gateway1 -Location $AzureAdvConfigSiteAtoBConn.loc2 `
+    Write-Host ("Building site-2-site gateway connection to first Azure tenant gateway [{0}]" -f $AzureAdvConfigTenantAtoBConn.Connection21) -ForegroundColor White -NoNewline
+    New-AzVirtualNetworkGatewayConnection -Name $AzureAdvConfigTenantAtoBConn.Connection21 -ResourceGroupName $AzureAdvConfigTenantAtoBConn.rg2 `
+            -VirtualNetworkGateway1 $gateway2 -VirtualNetworkGateway2 $gateway1 -Location $AzureAdvConfigTenantAtoBConn.loc2 `
             -ConnectionType Vnet2Vnet -SharedKey $Global:SharedPSK -EnableBgp $UseBGP -RoutingWeight 10
     Write-Host "Done" -ForegroundColor Green
 }

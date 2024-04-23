@@ -14,5 +14,6 @@
 /DSC/*
 hyperv.ps1
 configs.example.ps1
-*dtolab*
+*lab*
+*test*
 

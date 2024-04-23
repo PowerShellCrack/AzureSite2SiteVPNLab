@@ -22,18 +22,18 @@ $VMAdminUser = 'xAdmin'
 $VMAdminPassword = '<password>'
 
 #NOTE: Make sure ALL subnets do not overlap!
-$OnPremSubnetCIDR = '10.120.0.0/16' #Always use /16
+$OnPremSubnetCIDR = '10.100.0.0/16' #Always use /16
 $OnPremSubnetCount = 2
 
-$RegionSiteAId = 'SiteA'
-$AzureSiteAHubCIDR = '10.21.0.0/16' #Always use /16
-$AzureSiteASpokeCIDR = '10.22.0.0/16' #Always use /16; keep this subnet higher than hub (when incrementing)
-$AzureSiteASpokeSubnetCount = 1 #keep this at 1 for now
+$TenantASiteName = 'SiteA'
+$TenantAHubCIDR = '10.10.0.0/16' #Always use /16
+$TenantASpokeCIDR = '10.11.0.0/16' #Always use /16; keep this subnet higher than hub (when incrementing)
+$TenantASpokeSubnetCount = 1 #keep this at 1 for now
 
-$RegionSiteBId = 'SiteB'
-$AzureSiteBHubCIDR = '10.31.0.0/16' #Always use /16
-$AzureSiteBSpokeCIDR = '10.32.0.0/16' #Always use /16
-$AzureSiteBSpokeSubnetCount = 1 #keep this at 1 for now
+$TenantBSiteName = 'SiteB'
+$TenantBHubCIDR = '10.21.0.0/16' #Always use /16
+$TenantBSpokeCIDR = '10.22.0.0/16' #Always use /16
+$TenantBSpokeSubnetCount = 1 #keep this at 1 for now
 
 $DHCPLocation = 'router'   #defaults to DHCP server not on router; assumes DHCP is on a server
 #$DHCPLocation = '<IP, server, or router>'   #defaults to DHCP server not on router; assumes DHCP is on a server
@@ -55,10 +55,10 @@ $UseBGP = $false # not required for VPN, but can help. Costs more.
 
 #used in step 5
 $AzureVnetToVnetPeering = @{
-    SiteASubscriptionID = '<SubscriptionAID>'
-    SiteATenantID= '<TenantAID>'
-    SiteBSubscriptionID = '<SubscriptionBID>'
-    SiteBTenantID = '<TenantBID>'
+    TenantASubscriptionID = '<SubscriptionAID>'
+    TenantATenantID= '<TenantAID>'
+    TenantBSubscriptionID = '<SubscriptionBID>'
+    TenantBTenantID = '<TenantBID>'
 }
 
 #Uses Git, SSH and SCP to build VyOS router
@@ -75,130 +75,12 @@ $SimpleAppendix = 'Simple'
 ##* Runtime Function - REQUIRED
 ##*=============================================
 
-#region FUNCTION: Check if running in ISE
-Function Test-IsISE {
-    # try catch accounts for:
-    # Set-StrictMode -Version latest
-    try {
-        return ($null -ne $psISE);
-    }
-    catch {
-        return $false;
-    }
-}
-#endregion
-
-#region FUNCTION: Check if running in Visual Studio Code
-Function Test-VSCode{
-    if($env:TERM_PROGRAM -eq 'vscode') {
-        return $true;
-    }
-    Else{
-        return $false;
-    }
-}
-#endregion
-
-#region FUNCTION: Find script path for either ISE or console
-Function Get-ScriptPath {
-    <#
-        .SYNOPSIS
-            Finds the current script path even in ISE or VSC
-        .LINK
-            Test-VSCode
-            Test-IsISE
-    #>
-    param(
-        [switch]$Parent
-    )
-
-    Begin{}
-    Process{
-        Try{
-            if ($PSScriptRoot -eq "")
-            {
-                if (Test-IsISE)
-                {
-                    $ScriptPath = $psISE.CurrentFile.FullPath
-                }
-                elseif(Test-VSCode){
-                    $context = $psEditor.GetEditorContext()
-                    $ScriptPath = $context.CurrentFile.Path
-                }Else{
-                    $ScriptPath = (Get-location).Path
-                }
-            }
-            else
-            {
-                $ScriptPath = $PSCommandPath
-            }
-        }
-        Catch{
-            $ScriptPath = '.'
-        }
-    }
-    End{
-
-        If($Parent){
-            Split-Path $ScriptPath -Parent
-        }Else{
-            $ScriptPath
-        }
-    }
-
-}
-#endregion
-
-Function Resolve-ActualPath{
-    [CmdletBinding()]
-    param(
-        [string]$FileName,
-        [string]$WorkingPath,
-        [Switch]$Parent
-    )
-    ## Get the name of this function
-    [string]${CmdletName} = $MyInvocation.MyCommand
-
-    If(Resolve-Path $FileName -ErrorAction SilentlyContinue){
-        $FullPath = Resolve-Path $FileName
-    }
-    #If unable to resolve the file path try building path from working path location
-    Else{
-        $FullPath = Join-Path -Path $WorkingPath -ChildPath $FileName
-    }
-
-    #Try to resolve the path one more time using the fullpath set
-    Try{
-        $ResolvedPath = Resolve-Path $FullPath -ErrorAction $ErrorActionPreference
-    }
-    Catch{
-        Throw ("{0}" -f $_.Exception.Message)
-    }
-    Finally{
-        If($Parent){
-            $Return = Split-Path $ResolvedPath -Parent
-        }Else{
-            $Return = $ResolvedPath.Path
-        }
-        $Return
-    }
-}
-
 
 ##*========================================================================
 ##* BUILD PATHS
 ##*========================================================================
-#region VARIABLES: Building paths & values
-# Use function to get paths because PowerShell ISE & other editors have different results
-[string]$scriptPath = Get-ScriptPath
-[string]$scriptFileName = Split-Path -Path $scriptPath -Leaf
-[string]$scriptRoot = Split-Path -Path $scriptPath -Parent
-
-If($null -eq $scriptRoot){
-    $FunctionPath = Resolve-ActualPath -FileName library.ps1 -WorkingPath 'Functions' -Parent
-}Else{
-    [string]$FunctionPath = Join-Path -Path $scriptRoot -ChildPath 'Functions'
-}
+[string]$ResourceRoot = ($PWD.ProviderPath, $PSScriptRoot)[[bool]$PSScriptRoot]
+[string]$FunctionPath = Join-Path -Path $ResourceRoot -ChildPath 'Functions'
 
 #region library custom functions
 . "$FunctionPath\library.ps1"
@@ -235,23 +117,23 @@ If(!$Global:randomChar){
 }
 #endregion
 
-If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteAHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
+If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($TenantAHubCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$TenantAHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
-If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($AzureSiteBHubCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$OnPremSubnetCIDR] and [`$AzureSiteBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
+If(Test-SameSubnet -Ip1 ($OnPremSubnetCIDR -replace '/\d+$','') -ip2 ($TenantBHubCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$OnPremSubnetCIDR] and [`$TenantBHubCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
-If(Test-SameSubnet -Ip1 ($AzureSiteAHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteASpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteAHubCIDR] and [`$AzureSiteASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
+If(Test-SameSubnet -Ip1 ($TenantAHubCIDR -replace '/\d+$','') -ip2 ($TenantASpokeCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$TenantAHubCIDR] and [`$TenantASpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 
-If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSiteBSpokeCIDR -replace '/\d+$','') ){
-    Write-Host ("[`$AzureSiteBHubCIDR] and [`$AzureSiteBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
+If(Test-SameSubnet -Ip1 ($TenantBHubCIDR -replace '/\d+$','') -ip2 ($TenantBSpokeCIDR -replace '/\d+$','') ){
+    Write-Host ("[`$TenantBHubCIDR] and [`$TenantBSpokeCIDR] variables cannot be in the same subnet space!" ) -ForegroundColor Black -BackgroundColor Red
     break
 }
 #============================================
@@ -259,18 +141,33 @@ If(Test-SameSubnet -Ip1 ($AzureSiteBHubCIDR -replace '/\d+$','') -ip2 ($AzureSit
 #============================================
 #region connect to Azure if not already connected
 If(!$NoAzureCheck){
-    Write-Host "Checking for Az Powershell module..." -ForegroundColor White -NoNewline
-    If((Find-Module Az).Version -in (Get-InstalledModule Az -AllVersions).version){
-        Write-Host ("Az Module [{0}] installed" -f (Get-InstalledModule Az -AllVersions).version) -ForegroundColor Green
-    }
-    Else{
-        Write-Host "Updating module, this can take awhile..." -ForegroundColor Yellow -NoNewline
-        Install-Module -Name Az -AllowClobber -Scope AllUsers -Force
-        Write-Host "Done" -ForegroundColor Green
+    
+    #need modules: Az.Accounts, Az.Resources ,Az.Network, Az.Storage, Az.Compute
+    $modules = @(
+        'Az.Accounts',
+        'Az.Resources',
+        'Az.Network',
+        'Az.Storage',
+        'Az.Compute'
+    )
+
+    foreach ($module in $modules){
+        Write-Host ("Checking for installed module: {0}..." -f $module) -ForegroundColor White -NoNewline
+        If((Find-Module $module).Version -in (Get-InstalledModule $module -AllVersions).version)
+        {
+            Write-Host ("Version [{0}] installed" -f (Get-InstalledModule $module -AllVersions).version) -ForegroundColor Green
+        }
+        Else{
+            Write-Host " |--Updating, please wait..." -ForegroundColor Yellow -NoNewline
+            Install-Module -Name $module -AllowClobber -Scope AllUsers -Force
+            Write-Host "Done" -ForegroundColor Green
+        }
     }
 
+    Update-AzConfig -DisplayBreakingChangeWarning $false | Out-Null
+
     #get azure context
-    $Context = Get-AzContext -ErrorAction Stop
+    $Context = Get-AzContext -ErrorAction SilentlyContinue
 
     Try{
         #if no context assume not connected to Azure
@@ -351,7 +248,7 @@ If($HyperVHDxLocation -match 'default')
 # VYOS ISO CHECK
 #============================================
 #build the path to iso in scripts root dir
-[string]$IsosPath = Join-Path -Path $scriptRoot -ChildPath 'isos'
+[string]$IsosPath = Join-Path -Path $ResourceRoot -ChildPath 'isos'
 $vyosIsoSizeMb = 230
 
 If(!$NoVyosISOCheck){
@@ -366,13 +263,15 @@ If(!$NoVyosISOCheck){
         $destination = "$IsosPath\vyos-1.1.8-amd64.iso"
     }
     ElseIf([string]::IsNullOrEmpty($VyosIsoPath) -or ($VyosIsoPath -match 'default') ){
-        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        #$vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        $vyossource = 'https://master.dl.sourceforge.net/project/vyos-firewall/vyos-1.1.8-amd64.iso?viasf=1'
         $vyosfilename = (Split-Path $vyossource -Leaf)
         $VyOSResponse = 'Y'
         $destination = "$Env:temp\$vyosfilename"
     }
     Else{
-        $vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        #$vyossource = 'https://s3.amazonaws.com/s3-us.vyos.io/vyos-1.1.8-amd64.iso'
+        $vyossource = 'https://master.dl.sourceforge.net/project/vyos-firewall/vyos-1.1.8-amd64.iso?viasf=1'
         $vyosfilename = (Split-Path $vyossource -Leaf)
 
         # Destination to save the file
@@ -547,42 +446,42 @@ Foreach($Subnet in $VyOSConfig.LocalSubnetPrefix.GetEnumerator() | Sort Name)
 #============================================
 #region Azure Network Configurations
 #-----------------------------------------
-$RegionName = ($LabPrefix.Replace(" ",'') + '-' + $SimpleAppendix).Trim('-').ToLower()
+$SiteName = ($LabPrefix.Replace(" ",'') + '-' + $SimpleAppendix).Trim('-').ToLower()
 
-$SubnetsFromAzureSiteASpokeCIDR = @()
-$SubnetsFromAzureSiteASpokeCIDR += Get-SimpleSubnets -Cidr $AzureSiteASpokeCIDR -Count $AzureSiteASpokeSubnetCount
-$SubnetsFromAzureSiteAHubCIDR = Get-SimpleSubnets -Cidr $AzureSiteAHubCIDR
+$SubnetsFromAzureTenantASpokeCIDR = @()
+$SubnetsFromAzureTenantASpokeCIDR += Get-SimpleSubnets -Cidr $TenantASpokeCIDR -Count $TenantASpokeSubnetCount
+$SubnetsFromAzureTenantAHubCIDR = Get-SimpleSubnets -Cidr $TenantAHubCIDR
 
-$SubnetsFromAzureSiteBSpokeCIDR = @()
-$SubnetsFromAzureSiteBSpokeCIDR += Get-SimpleSubnets -Cidr $AzureSiteBSpokeCIDR -Count $AzureSiteBSpokeSubnetCount
-$SubnetsFromAzureSiteBHubCIDR = Get-SimpleSubnets -Cidr $AzureSiteBHubCIDR
+$SubnetsFromAzureTenantBSpokeCIDR = @()
+$SubnetsFromAzureTenantBSpokeCIDR += Get-SimpleSubnets -Cidr $TenantBSpokeCIDR -Count $TenantBSpokeSubnetCount
+$SubnetsFromAzureTenantBHubCIDR = Get-SimpleSubnets -Cidr $TenantBHubCIDR
 
 
 $AzureSimpleConfig = @{
     LocationName = 'East US 2'
     #Dynabmic Variables
 
-    ResourceGroupName = $RegionName + '-rg'
-    VnetName = $RegionName + '-vNet'
-    VnetGatewayName = $RegionName + '-vng'
-    LocalGatewayName = $RegionName + '-lng'
-    PublicIPName = $RegionName + '-pip'
-    ConnectionName = ('connection-to-' + $RegionName)
+    ResourceGroupName = $SiteName + '-rg'
+    VnetName = $SiteName + '-vNet'
+    VnetGatewayName = $SiteName + '-vng'
+    LocalGatewayName = $SiteName + '-lng'
+    PublicIPName = $SiteName + '-pip'
+    ConnectionName = ('connection-to-' + $SiteName)
 
     #Azure vnet CIDR
-    VnetCIDRPrefix = $AzureSiteAHubCIDR
+    VnetCIDRPrefix = $TenantAHubCIDR
     #Azure subnet prefixes
-    DefaultSubnetName = $RegionName + '-default-subnet'
-    #VnetSubnetPrefix = ($AzureSiteAHubCIDR -replace '/\d+$', '/24')
-    VnetSubnetPrefix = $SubnetsFromAzureSiteAHubCIDR[0]
+    DefaultSubnetName = $SiteName + '-default-subnet'
+    #VnetSubnetPrefix = ($TenantAHubCIDR -replace '/\d+$', '/24')
+    VnetSubnetPrefix = $SubnetsFromAzureTenantAHubCIDR[0]
 
-    VnetGatewayIpConfigName = $RegionName + '-gateway-ipconfig'
-    VnetGatewayPrefix = ($SubnetsFromAzureSiteAHubCIDR[-1] -replace '/\d+$', '/26')
+    VnetGatewayIpConfigName = $SiteName + '-gateway-ipconfig'
+    VnetGatewayPrefix = ($SubnetsFromAzureTenantAHubCIDR[-1] -replace '/\d+$', '/26')
 
-    TunnelDescription = ('Gateway to ' + $RegionName + ' in Azure').Replace('-',' ')
+    TunnelDescription = ('Gateway to ' + $SiteName + ' in Azure').Replace('-',' ')
 
     #storage account info
-    StorageAccountName = $RegionName + '-sa'
+    StorageAccountName = $SiteName + '-sa'
     StorageSku = 'Standard_LRS'
 }
 #endregion
@@ -590,7 +489,7 @@ $AzureSimpleConfig = @{
 #update location if running gov
 If($AzureGov){
     $AzureSimpleConfig['LocationName'] = 'usgovvirginia'
-    $AzureSimpleConfig['TunnelDescription'] = ('Gateway to ' + $RegionName + ' in Azure Gov').Replace('-',' ')
+    $AzureSimpleConfig['TunnelDescription'] = ('Gateway to ' + $SiteName + ' in Azure Gov').Replace('-',' ')
 }
 
 #region Virtual Machine Configurations
@@ -599,7 +498,7 @@ $AzureSimpleVM = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm1'
-    Name = $RegionName + '-vm1'
+    Name = $SiteName + '-vm1'
     Size = 'Standard_B1ms'
 
     NICName = $LabPrefix + '-vm1-ni'
@@ -610,7 +509,7 @@ $AzureSimpleVM = @{
     SubnetName = $AzureSimpleConfig.DefaultSubnetName
     SubnetAddressPrefix = $AzureSimpleConfig.VnetSubnetPrefix[0]
 
-    NSGName = $RegionName + '-nsg'
+    NSGName = $SiteName + '-nsg'
 
     EnableAutoshutdown = $true
     AutoShutdownNotificationType = $Email #set to either an email or webhook url
@@ -622,7 +521,7 @@ $HyperVSimpleVM = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 11) + '-vm2'
-    Name = $RegionName + '-vm2'
+    Name = $SiteName + '-vm2'
     ISOLocation = $HyperVVmIsoPath
     Unattended = $true
     HDDSize=60GB #in gigabytes
@@ -634,57 +533,57 @@ $HyperVSimpleVM = @{
 #============================================
 #region Azure Network Configurations - Region 1
 #---------------------------------------------------------
-$RegionAName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteAId).ToLower()
+$SiteAName = ($LabPrefix.Replace(" ",'') + '-' + $TenantASiteName).ToLower()
 
 #Static Properties [EDIT ALLOWED]
-$AzureAdvConfigSiteA = @{
+$AzureAdvConfigTenantA = @{
     LocationName = 'East US'
 
-    ResourceGroupName = $RegionAName + '-rg'
+    ResourceGroupName = $SiteAName + '-rg'
 
-    VnetSpokeName = $RegionAName + '-spoke-vnet'
-    VnetSpokeCIDRPrefix = $AzureSiteASpokeCIDR
-    VnetSpokeSubnetName = $RegionAName + '-spoke-subnet'
-    #VnetSpokeSubnetAddressPrefix = ($AzureSiteASpokeCIDR -replace '/\d+$', '/24')
-    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteASpokeCIDR
+    VnetSpokeName = $SiteAName + '-spoke-vnet'
+    VnetSpokeCIDRPrefix = $TenantASpokeCIDR
+    VnetSpokeSubnetName = $SiteAName + '-spoke-subnet'
+    #VnetSpokeSubnetAddressPrefix = ($TenantASpokeCIDR -replace '/\d+$', '/24')
+    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureTenantASpokeCIDR
 
-    VnetGatewayIpConfigName = $RegionAName + '-gateway-ipconfig'
+    VnetGatewayIpConfigName = $SiteAName + '-gateway-ipconfig'
 
-    VnetHubName = $RegionAName + '-hub-vnet'
-    VnetHubCIDRPrefix = $AzureSiteAHubCIDR
-    VnetHubSubnetName = $RegionAName + '-hub-subnet'
-    VnetHubSubnetAddressPrefix = $SubnetsFromAzureSiteAHubCIDR[0]
-    VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureSiteAHubCIDR[-56] -replace '/\d+$', '/26')
+    VnetHubName = $SiteAName + '-hub-vnet'
+    VnetHubCIDRPrefix = $TenantAHubCIDR
+    VnetHubSubnetName = $SiteAName + '-hub-subnet'
+    VnetHubSubnetAddressPrefix = $SubnetsFromAzureTenantAHubCIDR[0]
+    VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureTenantAHubCIDR[-56] -replace '/\d+$', '/26')
 
     VnetASN = 65010
 
-    NSGSpokeName = $RegionAName + '-spoke-nsg'
-    NSGGatewayName = $RegionAName + '-gateway-nsg'
+    NSGSpokeName = $SiteAName + '-spoke-nsg'
+    NSGGatewayName = $SiteAName + '-gateway-nsg'
 
     StorageSku = 'standard_lrs'
 
-    PublicIpName = $RegionAName.Replace(" ",'') + '-vngw-pip'
+    PublicIpName = $SiteAName.Replace(" ",'') + '-vngw-pip'
 
-    VnetPeerNameAB = ($RegionAName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
-    VnetPeerNameBA = ($RegionAName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
+    VnetPeerNameAB = ($SiteAName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
+    VnetPeerNameBA = ($SiteAName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
 
-    VnetGatewayName = ($RegionAName).Replace(" ",'').ToLower() + '-vng'
-    LocalGatewayName = $RegionAName + '-lng'
-    ConnectionName = ('connection-to-' + $RegionAName).Replace(" ",'')
+    VnetGatewayName = ($SiteAName).Replace(" ",'').ToLower() + '-vng'
+    LocalGatewayName = $SiteAName + '-lng'
+    ConnectionName = ('connection-to-' + $SiteAName).Replace(" ",'')
 
-    TunnelDescription = ('Gateway to ' + $RegionAName + ' in Azure').Replace("-",' ')
+    TunnelDescription = ('Gateway to ' + $SiteAName + ' in Azure').Replace("-",' ')
 
-    StorageAccountName = ($RegionAName).Replace(" ",'').ToLower() + '-sa'
+    StorageAccountName = ($SiteAName).Replace(" ",'').ToLower() + '-sa'
 }
 #update location if running gov
 If($AzureGov){
-    $AzureAdvConfigSiteA['LocationName'] = 'usgovvirginia'
-    $AzureAdvConfigSiteA['TunnelDescription'] = ('Gateway to ' + $RegionAName + ' in Azure Gov').Replace('-',' ')
+    $AzureAdvConfigTenantA['LocationName'] = 'usgovvirginia'
+    $AzureAdvConfigTenantA['TunnelDescription'] = ('Gateway to ' + $SiteAName + ' in Azure Gov').Replace('-',' ')
 }
 
 # Virtual Machine Configurations - Region 1
 #-------------------------------------------
-$AzureVMSiteA = @{
+$AzureVMTenantA = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 9) + '-a-vm1'
@@ -696,15 +595,15 @@ $AzureVMSiteA = @{
     Skus = '2019-Datacenter'
     Version = 'latest'
 
-    NICName = $RegionAName + '-vm1-ni'
+    NICName = $SiteAName + '-vm1-ni'
 
-    VNetName = $AzureAdvConfigSiteA.VnetSpokeName
-    VnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeCIDRPrefix
+    VNetName = $AzureAdvConfigTenantA.VnetSpokeName
+    VnetAddressPrefix = $AzureAdvConfigTenantA.VnetSpokeCIDRPrefix
 
-    SubnetName = $AzureAdvConfigSiteA.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteA.VnetSpokeSubnetAddressPrefix[0]
+    SubnetName = $AzureAdvConfigTenantA.VnetSpokeSubnetName
+    SubnetAddressPrefix = $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix[0]
 
-    NSGName = $RegionAName + '-nsg'
+    NSGName = $SiteAName + '-nsg'
 
     EnableAutoshutdown = $true
     AutoShutdownNotificationType = $Email # set to either an email or webhook url
@@ -717,62 +616,62 @@ $AzureVMSiteA = @{
 
 #region Azure Network Configurations - Region 2
 #--------------------------------------------------------
-$RegionBName = ($LabPrefix.Replace(" ",'') + '-' + $RegionSiteBId).ToLower()
+$SiteBName = ($LabPrefix.Replace(" ",'') + '-' + $TenantBSiteName).ToLower()
 
 #Static Properties [EDIT ALLOWED]
-$AzureAdvConfigSiteB = @{
+$AzureAdvConfigTenantB = @{
     LocationName = 'West US'
 
-    ResourceGroupName = $RegionBName + '-rg'
+    ResourceGroupName = $SiteBName + '-rg'
 
-    VnetSpokeName = $RegionBName + '-spoke-vnet'
-    VnetSpokeCIDRPrefix = $AzureSiteBSpokeCIDR
-    VnetSpokeSubnetName =  $RegionBName + '-spoke-subnet'
-    #VnetSpokeSubnetAddressPrefix = ($AzureSiteBSpokeCIDR -replace '/\d+$', '/24')
-    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureSiteBSpokeCIDR
+    VnetSpokeName = $SiteBName + '-spoke-vnet'
+    VnetSpokeCIDRPrefix = $TenantBSpokeCIDR
+    VnetSpokeSubnetName =  $SiteBName + '-spoke-subnet'
+    #VnetSpokeSubnetAddressPrefix = ($TenantBSpokeCIDR -replace '/\d+$', '/24')
+    VnetSpokeSubnetAddressPrefix = $SubnetsFromAzureTenantBSpokeCIDR
 
-    VnetGatewayIpConfigName = $RegionBName + '-gateway-ipconfig'
+    VnetGatewayIpConfigName = $SiteBName + '-gateway-ipconfig'
 
-    VnetHubName = $RegionBName + '-Hub-vnet'
-    VnetHubCIDRPrefix = $AzureSiteBHubCIDR
-    VnetHubSubnetName = $RegionBName + '-hub-subnet'
-    VnetHubSubnetAddressPrefix = $SubnetsFromAzureSiteBHubCIDR[0]
-    VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureSiteBHubCIDR[-56] -replace '/\d+$', '/26')
+    VnetHubName = $SiteBName + '-Hub-vnet'
+    VnetHubCIDRPrefix = $TenantBHubCIDR
+    VnetHubSubnetName = $SiteBName + '-hub-subnet'
+    VnetHubSubnetAddressPrefix = $SubnetsFromAzureTenantBHubCIDR[0]
+    VnetHubSubnetGatewayAddressPrefix = ($SubnetsFromAzureTenantBHubCIDR[-56] -replace '/\d+$', '/26')
 
     VnetASN = 65011
 
-    NSGSpokeName = $RegionBName + '-spoke-nsg'
-    NSGGatewayName = $RegionBName + '-gateway-nsg'
+    NSGSpokeName = $SiteBName + '-spoke-nsg'
+    NSGGatewayName = $SiteBName + '-gateway-nsg'
 
     StorageSku = "standard_lrs"
 
-    PublicIpName = $RegionBName.Replace(" ",'') + '-vngw-pip'
+    PublicIpName = $SiteBName.Replace(" ",'') + '-vngw-pip'
 
-    VnetPeerNameAB = ($RegionBName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
-    VnetPeerNameBA = ($RegionBName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
+    VnetPeerNameAB = ($SiteBName + 'HubToSpoke').Replace(" ",'').Replace("-",'')
+    VnetPeerNameBA = ($SiteBName + 'SpokeToHub').Replace(" ",'').Replace("-",'')
 
-    VnetGatewayName = ($RegionBName).Replace(" ",'').ToLower() + '-vng'
-    LocalGatewayName = $RegionBName + '-lng'
-    ConnectionName = ('connection-to-' + $RegionBName).Replace(" ",'')
+    VnetGatewayName = ($SiteBName).Replace(" ",'').ToLower() + '-vng'
+    LocalGatewayName = $SiteBName + '-lng'
+    ConnectionName = ('connection-to-' + $SiteBName).Replace(" ",'')
 
-    TunnelDescription = ('Gateway to ' + $RegionBName + ' in Azure').Replace("-",' ')
+    TunnelDescription = ('Gateway to ' + $SiteBName + ' in Azure').Replace("-",' ')
 
-    StorageAccountName = ($RegionBName).Replace(" ",'').ToLower() + '-sa'
+    StorageAccountName = ($SiteBName).Replace(" ",'').ToLower() + '-sa'
 }
 
 #update location if running gov
 If($AzureGov){
-    $AzureAdvConfigSiteB['LocationName'] = 'usgovarizona'
-    $AzureAdvConfigSiteB['TunnelDescription'] = ('Gateway to ' + $RegionBName + ' in Azure Gov').Replace('-',' ')
+    $AzureAdvConfigTenantB['LocationName'] = 'usgovarizona'
+    $AzureAdvConfigTenantB['TunnelDescription'] = ('Gateway to ' + $SiteBName + ' in Azure Gov').Replace('-',' ')
 }
 
 # Virtual Machine Configurations - Region 2
 #-------------------------------------------
-$AzureVMSiteB = @{
+$AzureVMTenantB = @{
     LocalAdminUser = $VMAdminUser
     LocalAdminPassword = $VMAdminPassword
     ComputerName = ($LabPrefix.ToLower() | Set-TruncateString -length 9) + '-b-vm1'
-    Name = $RegionBName + '-vm1'
+    Name = $SiteBName + '-vm1'
     Size = 'Standard_B2s'
 
     PublisherName = 'MicrosoftWindowsServer'
@@ -780,15 +679,15 @@ $AzureVMSiteB = @{
     Skus = '2016-Datacenter'
     Version = 'latest'
 
-    NICName = $RegionBName + '-vm1-ni'
+    NICName = $SiteBName + '-vm1-ni'
 
-    VNetName = $AzureAdvConfigSiteB.VnetSpokeName
-    VnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeCIDRPrefix
+    VNetName = $AzureAdvConfigTenantB.VnetSpokeName
+    VnetAddressPrefix = $AzureAdvConfigTenantB.VnetSpokeCIDRPrefix
 
-    SubnetName = $AzureAdvConfigSiteB.VnetSpokeSubnetName
-    SubnetAddressPrefix = $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix[0]
+    SubnetName = $AzureAdvConfigTenantB.VnetSpokeSubnetName
+    SubnetAddressPrefix = $AzureAdvConfigTenantB.VnetSpokeSubnetAddressPrefix[0]
 
-    NSGName = $RegionBName + '-nsg'
+    NSGName = $SiteBName + '-nsg'
 
     EnableAutoshutdown = $true
     AutoShutdownNotificationType = $Email # set to either an email or webhook url
@@ -800,16 +699,16 @@ $AzureVMSiteB = @{
 
 #region Region 1 to Region 2 connection
 #----------------------------------------------------------
-$AzureAdvConfigSiteAtoBConn= @{
-    rg1=$AzureAdvConfigSiteA.ResourceGroupName
-    rg2=$AzureAdvConfigSiteB.ResourceGroupName
-    loc1=$AzureAdvConfigSiteA.LocationName
-    loc2=$AzureAdvConfigSiteB.LocationName
-    VNetGatewayName1=$AzureAdvConfigSiteA.VnetGatewayName
-    VNetGatewayName2=$AzureAdvConfigSiteB.VnetGatewayName
+$AzureAdvConfigTenantAtoBConn= @{
+    rg1=$AzureAdvConfigTenantA.ResourceGroupName
+    rg2=$AzureAdvConfigTenantB.ResourceGroupName
+    loc1=$AzureAdvConfigTenantA.LocationName
+    loc2=$AzureAdvConfigTenantB.LocationName
+    VNetGatewayName1=$AzureAdvConfigTenantA.VnetGatewayName
+    VNetGatewayName2=$AzureAdvConfigTenantB.VnetGatewayName
 
-    Connection12  = $RegionAName + '-to-' + $RegionBName +'-conn'
-    Connection21  = $RegionBName + '-to-' + $RegionAName +'-conn'
+    Connection12  = $SiteAName + '-to-' + $SiteBName +'-conn'
+    Connection21  = $SiteBName + '-to-' + $SiteAName +'-conn'
 }
 
 #endregion

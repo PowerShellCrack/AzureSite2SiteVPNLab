@@ -1,5 +1,12 @@
 # Change log for AzureSite2SiteVPNLab
 
+## 1.5.1 - April 22, 2024
+
+- Changed the variable names for clarity
+- Fixed hub and spoke subnet creation
+- Fixed Azure login during context check
+- Added optionC script
+
 ## 1.5.0 - May 21, 2022
 
 - Added support for Azure Gov; updates location to use Virginia for site A and Arizona for site B

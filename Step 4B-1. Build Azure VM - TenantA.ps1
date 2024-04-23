@@ -1,9 +1,10 @@
+
 <#
     .SYNOPSIS
         Builds a Azure VM
 
     .DESCRIPTION
-        Builds a Azure VM for Site 2
+        Builds a Azure VM for Site 1
 
     .NOTES
         1. Build VM configurations
@@ -20,6 +21,7 @@
         TODO
         - Prompt for VM name
         - Prompt for hub or spoke
+
 
     .PARAMETER VMName
     STRING
@@ -46,25 +48,25 @@
 
     .EXAMPLE
 
-    & '.\Step 4B-2. Build Azure VM -Region 2.ps1'
+    & '.\Step 4B-1. Build Azure VM -Region 1.ps1'
 
     RESULT: Builds a Windows Server VM
 
     .EXAMPLE
 
-    & '.\Step 4B-2. Build Azure VM -Region 2.ps1' -VMName CONTOSO-WK1 -OSType Workstation
+    & '.\Step 4B-1. Build Azure VM -Region 1.ps1' -VMName CONTOSO-WK1 -OSType Workstation
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1
 
     .EXAMPLE
 
-    & '.\Step 4B-2. Build Azure VM -Region 2.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential)
+    & '.\Step 4B-1. Build Azure VM -Region 1.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential)
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local using credentials
 
     .EXAMPLE
 
-    & '.\Step 4B-2. Build Azure VM -Region 2.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
+    & '.\Step 4B-1. Build Azure VM -Region 1.ps1' -VMName CONTOSO-WK1 -OSType Workstation -JoinDomain -Domain CONTOSO.local -DomainJoinCreds (Get-Credential) -OU "OU=Workstations,OU=Region1,DC=CONTOSO,DC=LOCAL"
 
     RESULT: Builds a Windows 10 VM named CONTOSO-WK1 and attempts to join it to domain CONTOSO.local in Region 1 workstation OU using credentials
 
@@ -103,7 +105,7 @@ Param(
 
     [switch]$SecureVM,
 
-    [Parameter(ParameterSetName = 'JoinDomain')]
+    [Parameter(Mandatory = $false,ParameterSetName = 'JoinDomain')]
     [switch]$JoinDomain,
 
     [Parameter(Mandatory = $true,ParameterSetName = 'JoinDomain')]
@@ -136,9 +138,8 @@ Else{
 }
 #endregion
 
-
 #start transcript
-$LogfileName = "$RegionBName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
+$LogfileName = "$SiteAName-BuildAzureVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
 #install Devlabs for Arm Templates support
@@ -147,7 +148,7 @@ If((Get-AzResourceProvider -ProviderNamespace Microsoft.DevTestLab).Registration
 }
 
 #region Build VM configurations
-$VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue
+$VMs = Get-AzVM -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue
 If($VMName)
 {
     If($VMName -in $VMs.Name){
@@ -166,34 +167,35 @@ Else{
     #Increment VM name and nic
     $i=1
     do {
-        $computername = ($AzureVMSiteB.ComputerName -replace '\d+$', $i)
-        $newVMname = ($AzureVMSiteB.Name -replace '\d+$', $i)
+        $computername = ($AzureVMTenantA.ComputerName -replace '\d+$', $i)
+        $newVMname = ($AzureVMTenantA.Name -replace '\d+$', $i)
         #only replace last digit in name (incase multiple digits exist)
-        $newNIC = ($AzureVMSiteB.NICName -replace '\d(?!.*\d)', $i)
+        $newNIC = ($AzureVMTenantA.NICName -replace '\d(?!.*\d)', $i)
         $i++
     } until ($newVMname -notin $VMs.Name)
 }
-#Update Names in config
-$AzureVMSiteB['ComputerName'] = $computername
-$AzureVMSiteB['Name'] = $newVMname
-$AzureVMSiteB['NICName'] = $newNIC
 
-Write-Host ("Virtual Machine name will be [{0}]" -f $AzureVMSiteB.Name)  -ForegroundColor Green
+#Update Names in config
+$AzureVMTenantA['ComputerName'] = $computername
+$AzureVMTenantA['Name'] = $newVMname
+$AzureVMTenantA['NICName'] = $newNIC
+
+Write-Host ("Virtual Machine name will be [{0}]" -f $AzureVMTenantA.Name)  -ForegroundColor Green
 #endregion
 
 #region 1. Create a resource group:
-If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue))
+If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureAdvConfigSiteB.ResourceGroupName) -ForegroundColor White -NoNewline
+    Write-Host ("Creating Azure resource group [{0}]..." -f $AzureAdvConfigTenantA.ResourceGroupName) -ForegroundColor White -NoNewline
     Try{
-        New-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+        New-AzResourceGroup -Name $AzureAdvConfigTenantA.ResourceGroupName -Location $AzureAdvConfigTenantA.LocationName | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
     }
 }Else{
-    Write-Host ("Using Azure resource group [{0}]" -f $AzureAdvConfigSiteB.ResourceGroupName) -ForegroundColor Green
+    Write-Host ("Using Azure resource group [{0}]" -f $AzureAdvConfigTenantA.ResourceGroupName) -ForegroundColor Green
 }
 #endregion
 
@@ -201,16 +203,16 @@ If(-Not(Get-AzResourceGroup -Name $AzureAdvConfigSiteB.ResourceGroupName -ErrorA
 #region Create Storage Account
 #build random char for storage name
 
-If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
-            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureAdvConfigSiteB.StorageSku -and $_.StorageAccountName -like "$($RegionBName -replace '\W')*"} | Select -First 1)){
+If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
+            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Where {$_.Sku.Name -eq $AzureAdvConfigTenantA.StorageSku -and $_.StorageAccountName -like "$($SiteAName -replace '\W')*"} | Select -First 1)){
 
     $randomChar = (-join ((65..90) + (97..122) | Get-Random -Count 5 | % {[char]$_})).ToString()
-    $storageName = ($RegionBName +'-' + $randomChar).ToLower() -replace '[\W]', ''
+    $storageName = ($SiteAName +'-' + $randomChar).ToLower() -replace '[\W]', ''
     Write-Host ("Creating Azure storage account [{0}]..." -f $storageName) -ForegroundColor White -NoNewline
     Try{
-        $StorageAccount = New-AzStorageAccount -Name $storageName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -SkuName $AzureAdvConfigSiteB.StorageSku `
-                            -Location $AzureAdvConfigSiteB.LocationName -Kind Storage | Out-Null
-        $AzureAdvConfigSiteB['StorageAccount'] = $storageName
+        $StorageAccount = New-AzStorageAccount -Name $storageName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -SkuName $AzureAdvConfigTenantA.StorageSku `
+                            -Location $AzureAdvConfigTenantA.LocationName -Kind Storage | Out-Null
+        $AzureAdvConfigTenantA['StorageAccount'] = $storageName
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -220,27 +222,26 @@ If(-Not($StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzureAdvConfi
 }
 Else{
     Write-Host ("Using Azure storage account [{0}]" -f $StorageAccount.StorageAccountName) -ForegroundColor Green
-    $AzureAdvConfigSiteB['StorageAccount'] = $StorageAccount.StorageAccountName
+    $AzureAdvConfigTenantA['StorageAccount'] = $StorageAccount.StorageAccountName
 }
-
 #endregion
-
 
 #region Creating a new NSG to allow PS Remoting Port 5986 and RDP Port 3389
 #grab Vnet for NSG and NIC configurations
-$vNet = Get-AzVirtualNetwork -Name $AzureVMSiteB.VNetName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue
+$vNet = Get-AzVirtualNetwork -Name $AzureVMTenantA.VNetName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue
 
-If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
-    Write-Host ("Creating Azure network security group [{0}]..." -f $AzureVMSiteB.NSGName) -ForegroundColor White -NoNewline
+If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMTenantA.NSGName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+    Write-Host ("Creating Azure network security group [{0}]..." -f $AzureVMTenantA.NSGName) -ForegroundColor White -NoNewline
     Try{
-        $NSG = New-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+        $NSG = New-AzNetworkSecurityGroup -Name $AzureVMTenantA.NSGName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Location $AzureAdvConfigTenantA.LocationName | Out-Null
         $NSG | Add-AzNetworkSecurityRuleConfig -Name "Allow_Port_3389" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix * `
                         -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigSiteB.VnetSpokeSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigSiteB.VnetSpokeSubnetAddressPrefix[0] `
+        Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigTenantA.VnetSpokeSubnetName -VirtualNetwork $vNet -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix[0] `
                     -NetworkSecurityGroup $NSG -WarningAction SilentlyContinue | Out-Null
         $vNet | Set-AzVirtualNetwork -WarningAction SilentlyContinue | Out-Null
         Write-Host "Done" -ForegroundColor Green
+
     }
     Catch{
         Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
@@ -248,19 +249,17 @@ If(-Not($NSG = Get-AzNetworkSecurityGroup -Name $AzureVMSiteB.NSGName -ResourceG
     }
 }
 Else{
-    Write-Host ("Using Azure network security group [{0}]" -f $AzureVMSiteB.NSGName) -ForegroundColor Green
+    Write-Host ("Using Azure network security group [{0}]" -f $AzureVMTenantA.NSGName) -ForegroundColor Green
 }
 #endregion
 
 
-
-
 #region Attach VM to second subnet which should be defaultsubnet
-$VMSubnet = $vNet.Subnets | Where Name -eq $AzureVMSiteB.SubnetName
-Write-Host ("Attaching VM's network interface [{0}] to subnet [{1}]..." -f $AzureVMSiteB.NICName,$AzureVMSiteB.SubnetName) -ForegroundColor White -NoNewline
+$VMSubnet = $vNet.Subnets | Where Name -eq $AzureVMTenantA.SubnetName
+Write-Host ("Attaching VM's network interface [{0}] to subnet [{1}]..." -f $AzureVMTenantA.NICName,$AzureVMTenantA.SubnetName) -ForegroundColor White -NoNewline
 Try{
-    $NIC = New-AzNetworkInterface -Name $AzureVMSiteB.NICName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName `
-                -Location $AzureAdvConfigSiteB.LocationName -SubnetId $VMSubnet.Id -Force
+    $NIC = New-AzNetworkInterface -Name $AzureVMTenantA.NICName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
+                -Location $AzureAdvConfigTenantA.LocationName -SubnetId $VMSubnet.Id -Force
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
@@ -278,7 +277,7 @@ If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).
         do {
             $NewPassword = Read-host "Whats the new password?"
         } until ($NewPassword -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
-        $AzureVMSiteB['LocalAdminPassword'] = $NewPassword
+        $AzureVMTenantA['LocalAdminPassword'] = $NewPassword
     }
     Else{
         Write-Host ("Unable to continue. Change config.ps1 variable [`$VMAdminPassword] value") -ForegroundColor Black -BackgroundColor Red
@@ -287,20 +286,24 @@ If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).
 }
 
 
-Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $AzureVMSiteB.LocalAdminUser,$AzureVMSiteB.Name) -ForegroundColor White -NoNewline
-$LocalAdminSecurePassword = ConvertTo-SecureString $AzureVMSiteB.LocalAdminPassword -AsPlainText -Force
-$Credential = New-Object System.Management.Automation.PSCredential ($AzureVMSiteB.LocalAdminUser, $LocalAdminSecurePassword)
+Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $AzureVMTenantA.LocalAdminUser,$AzureVMTenantA.Name) -ForegroundColor White -NoNewline
+$LocalAdminSecurePassword = ConvertTo-SecureString $AzureVMTenantA.LocalAdminPassword -AsPlainText -Force
+$Credential = New-Object System.Management.Automation.PSCredential ($AzureVMTenantA.LocalAdminUser, $LocalAdminSecurePassword)
 Write-Host "Done" -ForegroundColor Green
 #endregion
 
+
+
+
 #Set VM Configuration
-$VMConfig = New-AzVMConfig -VMName $AzureVMSiteB.Name -VMSize $AzureVMSiteB.Size
+$VMConfig = New-AzVMConfig -VMName $AzureVMTenantA.Name -VMSize $AzureVMTenantA.Size
 #Set VM operating system parameters
 
-$VMConfig = Set-AzVMOperatingSystem -VM $VMConfig -Windows -ComputerName $AzureVMSiteB.ComputerName -Credential $Credential `
+$VMConfig = Set-AzVMOperatingSystem -VM $VMConfig -Windows -ComputerName $AzureVMTenantA.ComputerName -Credential $Credential `
             -ProvisionVMAgent -EnableAutoUpdate
 #Set VM network interface
 $VMConfig = Add-AzVMNetworkInterface -VM $VMConfig -Id $NIC.Id
+
 
 #Set VM operating system parameters
 If($OSType){
@@ -328,10 +331,10 @@ Else{
 
 
 #Set boot diagnostic storage account
-$VMConfig = Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -StorageAccountName $AzureAdvConfigSiteB.StorageAccount -ErrorAction SilentlyContinue
+$VMConfig = Set-AzVMBootDiagnostic -Enable -VM $VMConfig -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -StorageAccountName $AzureAdvConfigTenantA.StorageAccount -ErrorAction SilentlyContinue
 Try{
-    Write-Host ("Deploying virtual machine [{0}]..." -f $AzureVMSiteB.Name) -ForegroundColor White -NoNewline
-    New-AzVM -VM $VMConfig -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName | Out-Null
+    Write-Host ("Deploying virtual machine [{0}]..." -f $AzureVMTenantA.Name) -ForegroundColor White -NoNewline
+    New-AzVM -VM $VMConfig -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Location $AzureAdvConfigTenantA.LocationName | Out-Null
     Write-Host "Done" -ForegroundColor Green
 }
 Catch{
@@ -342,17 +345,17 @@ Catch{
 
 
 #region set autoshutdown (using custom function)
-If($AzureVMSiteB.EnableAutoShutdown){
+If($AzureVMTenantA.EnableAutoShutdown){
     #determine is notification is by email or webhookurl; set the appropiate param
     $EmailRegex = '^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$'
     $URLRegex = '(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)'
-    $ShutdownParam = @{Time=$AzureVMSiteB.ShutdownTime;TimeZone=$AzureVMSiteB.ShutdownTimeZone}
-    If($AzureVMSiteB.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam += @{Email=$AzureVMSiteB.AutoShutdownNotificationType}}
-    If($AzureVMSiteB.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam +=@{WebhookUrl=$AzureVMSiteB.AutoShutdownNotificationType}}
+    $ShutdownParam = @{Time=$AzureVMTenantA.ShutdownTime;TimeZone=$AzureVMTenantA.ShutdownTimeZone}
+    If($AzureVMTenantA.AutoShutdownNotificationType -match $EmailRegex){$ShutdownParam += @{Email=$AzureVMTenantA.AutoShutdownNotificationType}}
+    If($AzureVMTenantA.AutoShutdownNotificationType -match $URLRegex){$ShutdownParam +=@{WebhookUrl=$AzureVMTenantA.AutoShutdownNotificationType}}
 
     Try{
-        Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $AzureVMSiteB.Name) -ForegroundColor White -NoNewline
-        Set-AzVMAutoShutdown -Enable -Name $AzureVMSiteB.Name -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName @ShutdownParam | Out-Null
+        Write-Host ("Setting AutoShutdown on virtual machine [{0}]..." -f $AzureVMTenantA.Name) -ForegroundColor White -NoNewline
+        Set-AzVMAutoShutdown -Enable -Name $AzureVMTenantA.Name -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName @ShutdownParam | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -362,15 +365,14 @@ If($AzureVMSiteB.EnableAutoShutdown){
 #endregion
 
 
-
 If($SecureVM){
     # Advisor Recommendation (high): Virtual machines should encrypt temp disks, caches, and data flows between Compute and Storage resources
     #https://docs.microsoft.com/en-us/azure/virtual-machines/windows/disk-encryption-powershell-quickstart
     $KeyVaultName = ($LabPrefix + 'vmdiskkeys')
-    If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+    If(-Not($AzKeyVault = AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
         Write-Host ("Creating Azure Keyvault [{0}]..." -f $KeyVaultName) -ForegroundColor White -NoNewline
         Try{
-            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Location $AzureAdvConfigSiteB.LocationName -EnabledForDiskEncryption | Out-Null
+            $AzKeyVault = New-AzKeyVault -Name $KeyVaultName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Location $AzureAdvConfigTenantA.LocationName -EnabledForDiskEncryption | Out-Null
             Write-Host "Done" -ForegroundColor Green
         }
         Catch{
@@ -382,10 +384,10 @@ If($SecureVM){
         Write-Host ("Using Azure Azure Keyvault [{0}]" -f $KeyVaultName) -ForegroundColor Green
     }
 
-    #$AzKeyVault = Get-AzKeyVault -VaultName $KeyVaultName -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName
-    Write-Host ("Enabling Disk encryption on virtual Machine [{0}]..." -f $AzureVMSiteB.Name) -ForegroundColor White -NoNewline
+    #$AzKeyVault = Get-AzKeyVault -VaultName $KeyVaultName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName
+    Write-Host ("Enabling Disk encryption on virtual Machine [{0}]..." -f $AzureVMTenantA.Name) -ForegroundColor White -NoNewline
     Try{
-        Set-AzVMDiskEncryptionExtension -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -DiskEncryptionKeyVaultUrl $AzKeyVault.VaultUri -DiskEncryptionKeyVaultId $AzKeyVault.ResourceId -Force
+        Set-AzVMDiskEncryptionExtension -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VMName $AzureVMTenantA.Name -DiskEncryptionKeyVaultUrl $AzKeyVault.VaultUri -DiskEncryptionKeyVaultId $AzKeyVault.ResourceId -Force
         Write-Host ("Done. Key is stored in Azure KeyVault: {0}" -f $KeyVaultName) -ForegroundColor Green
     }
     Catch{
@@ -402,39 +404,39 @@ If($SecureVM){
 #region Reset VM password (Not working)
 <#
 #Re-reset password. Sometimes password set during deployment does not work
-$VM = Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureVMSiteB.Name
+$VM = Get-AzVM -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Name $AzureVMTenantA.Name
 
-Get-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Status
+Get-AzVM -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VMName $AzureVMTenantA.Name -Status
 #must grab the VM Computer Type handler
 $typeParams = @{
  'PublisherName' = 'Microsoft.Compute'
  'Type' = 'VMAccessAgent'
- 'Location' = $AzureAdvConfigSiteB.LocationName
+ 'Location' = $AzureAdvConfigTenantA.LocationName
 }
 $typeHandlerVersion = (Get-AzVMExtensionImage @typeParams | Sort-Object Version -Descending | Select-Object -first 1).Version
 
 #remove the access extension
-Remove-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Name 'enablevmaccess' -Force
+Remove-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VMName $AzureVMTenantA.Name -Name 'enablevmaccess' -Force
 
 #build params
 $extensionParams = @{
     Credential = $Credential
-    VMName = $AzureVMSiteB.Name
-    ResourceGroupName = $AzureAdvConfigSiteB.ResourceGroupName
+    VMName = $AzureVMTenantA.Name
+    ResourceGroupName = $AzureAdvConfigTenantA.ResourceGroupName
     Name = 'enablevmaccess'
-    Location = $AzureAdvConfigSiteB.LocationName
+    Location = $AzureAdvConfigTenantA.LocationName
     TypeHandlerVersion = $typeHandlerVersion
 }
 #add enablevmaccess back with new creds
 Set-AzVMAccessExtension @extensionParams
-#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name `
-            -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureAdvConfigSiteB.LocationName
-Update-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VM $VM
-Restart-AzVM -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -Name $AzureVMSiteB.Name
+#Set-AzVMAccessExtension -Credential $Credential -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VMName $AzureVMTenantA.Name `
+            -Name 'enablevmaccess' -TypeHandlerVersion $typeHandlerVersion -Location $AzureAdvConfigTenantA.LocationName
+Update-AzVM -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VM $VM
+Restart-AzVM -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Name $AzureVMTenantA.Name
 
 #Reset the Remote Desktop Services configuration
-#Set-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigSiteB.ResourceGroupName -VMName $AzureVMSiteB.Name -Name "VMRDPAccess" `
-            -Location $AzureAdvConfigSiteB.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
+#Set-AzVMAccessExtension -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VMName $AzureVMTenantA.Name -Name "VMRDPAccess" `
+            -Location $AzureAdvConfigTenantA.LocationName -typeHandlerVersion "2.0" -ForceRerun:$true
 #>
 #endregion
 
@@ -442,8 +444,8 @@ If($JoinDomain){
     #https://docs.microsoft.com/en-us/powershell/module/az.compute/set-azvmaddomainextension?view=azps-7.1.0
     $DomainParams = @{
         Name='domainjoinextension'
-        VMName=$AzureVMSiteA.Name
-        ResourceGroupName=$AzureAdvConfigSiteA.ResourceGroupName
+        VMName=$AzureVMTenantA.Name
+        ResourceGroupName=$AzureAdvConfigTenantA.ResourceGroupName
     }
 
     If($OU){
@@ -462,7 +464,7 @@ If($JoinDomain){
         }
     }
     Try{
-        Write-Host ("Attempting to join [{0}] to domain [{1}]..." -f $AzureVMSiteA.Name,$Domain) -ForegroundColor White -NoNewline
+        Write-Host ("Attempting to join [{0}] to domain [{1}]..." -f $AzureVMTenantA.Name,$Domain) -ForegroundColor White -NoNewline
         Set-AzVMADDomainExtension @DomainParams -Restart -Verbose
         Write-Host "Done" -ForegroundColor Green
     }
@@ -472,9 +474,9 @@ If($JoinDomain){
 
 }
 
+Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
+Write-Host (" Done creating virtual machine [{0}]" -f $AzureVMTenantA.Name) -ForegroundColor Black -BackgroundColor Green
+Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
 
-Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
-Write-Host (" Done creating virtual machine [{0}]" -f $AzureVMSiteB.Name) -ForegroundColor Black -BackgroundColor Green
-Write-Host "=================================================" -ForegroundColor Black -BackgroundColor Green
 
 Stop-Transcript
