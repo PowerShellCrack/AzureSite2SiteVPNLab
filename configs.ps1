@@ -245,6 +245,10 @@ If(!$NoAzureCheck){
         Write-Host ("{0}" -f $Global:AzSubscription.Tenant.Id) -ForegroundColor Green
         Write-host ("Using Subscription: ") -ForegroundColor White -NoNewline
         Write-Host ("{0}" -f $Global:AzSubscription.Subscription.Name) -ForegroundColor Green
+        
+        $Global:TenantName = (Get-AzContext).Account.id.Split('@')[-1].Split('.')[0].ToLower()
+        Write-host ("Tenant Name: ") -ForegroundColor White -NoNewline
+        Write-Host ("{0}" -f $Global:TenantName) -ForegroundColor Green
     }
     
 }
@@ -522,7 +526,7 @@ $AzureSimpleConfig = @{
     VnetGatewayIpConfigName = 'vgwip-' + $SiteName
     VnetGatewayPrefix = ($SubnetsFromAzureTenantAHubCIDR[-1] -replace '/\d+$', '/26')
 
-    TunnelDescription = ('Gateway to ' + $SiteName + '(' + $TenantName + ')').Replace('-',' ')
+    TunnelDescription = ('Gateway to ' + $SiteName + '(' + $Global:TenantName + ')').Replace('-',' ')
 
     #storage account info
     StorageAccountName = ('st' + $SiteName + '001').replace('-','')
@@ -615,7 +619,7 @@ $AzureAdvConfigTenantA = @{
     LocalGatewayName = 'lgw-' + $SiteAShortName
     ConnectionName = 'connection-to-' + $LabPrefix.ToLower() + '-onprem'
 
-    TunnelDescription = ('Gateway to ' + $SiteAShortName + ' (' + $TenantName + ')').replace('-',' ')
+    TunnelDescription = ('Gateway to ' + $SiteAShortName + ' (' + $Global:TenantName + ')').replace('-',' ')
 
     StorageSku = 'standard_lrs'
     StorageAccountName = ('st' + $SiteAShortName + '001').replace('-','')
@@ -714,7 +718,7 @@ $AzureAdvConfigTenantB = @{
     LocalGatewayName = $SiteBName + '-lgw'
     ConnectionName = ('cn-' + $SiteBName)
 
-    TunnelDescription = ('Gateway to ' + $SiteBName + '(' + $TenantName + ')').replace('-',' ')
+    TunnelDescription = ('Gateway to ' + $SiteBName + '(' + $Global:TenantName + ')').replace('-',' ')
 
     StorageAccountName = ('sa' + $SiteBName.ToLower() + '001').replace('-','')
 }
