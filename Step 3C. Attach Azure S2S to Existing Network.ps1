@@ -391,7 +391,7 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -
     Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureExistingConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-                    -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP `
+                    -Location $AzureExistingConfig.LocationName -GatewayIpAddress $Config.PublicIP `
                     -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -476,7 +476,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGate
     Write-host ("Building the local network gateway [{0}]..." -f $AzureExistingConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
+                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -484,13 +484,13 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGate
         Break
     }
 }
-ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
+ElseIf($Local.GatewayIpAddress -ne $Config.PublicIP)
 {
     Try{
-        Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
+        Write-Host ("Updating the local network gateway with ip [{0}]" -f $Config.PublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
         New-AzLocalNetworkGateway -Name $AzureExistingConfig.LocalGatewayName -ResourceGroupName $AzureExistingConfig.ResourceGroupName `
-                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
+                -Location $AzureExistingConfig.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -591,7 +591,7 @@ If($AttachNsg){
             #$NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowInternalRDPInbound" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix $VyOSConfig.LocalCIDRPrefix `
             #                -SourcePortRange * -DestinationAddressPrefix $AzureExistingConfig.VnetSubnetPrefix -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
-            $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowMyPublicRDPInbound" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix $HomePublicIP `
+            $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowMyPublicRDPInbound" -Priority 1200 -Protocol TCP -Access Allow -SourceAddressPrefix $Config.PublicIP `
                              -SourcePortRange * -DestinationAddressPrefix $AzureExistingConfig.VnetSubnetPrefix -DestinationPortRange 3389 -Direction Inbound | Set-AzNetworkSecurityGroup | Out-Null
 
             $NSG | Add-AzNetworkSecurityRuleConfig -Name "AllowAllInternalPortsInbound" -Priority 1210 -Protocol * -Access Allow -SourceAddressPrefix $VyOSConfig.LocalCIDRPrefix `
@@ -716,7 +716,7 @@ Else{
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
-        $RouterAutomationMode = $false
+        $Configs.RouterConfigs.AutomationMode = $false
     }
 }
 #endregion
@@ -895,7 +895,7 @@ Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinu
 $VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
-If($RouterAutomationMode)
+If($Configs.RouterConfigs.AutomationMode)
 {
     $RunManualSteps = $false
     Write-Host "Attempting to automatically configure router's site-2-site vpn settings..." -ForegroundColor Yellow
@@ -1005,7 +1005,7 @@ If($RunManualSteps)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureExistingConfig.VnetSubnetPrefix)
     Write-host ("Shared Key (PSK):    {0}" -f $Global:SharedPSK)
-    Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
+    Write-host ("Home Public IP:      {0}" -f $Config.PublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
 
     #region Copy Paste Mode

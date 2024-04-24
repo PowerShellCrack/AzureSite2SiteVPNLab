@@ -182,10 +182,10 @@ If( -Not(Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -Re
     Write-Host ("Creating Azure local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         #New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-        #            -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
+        #            -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix $VyOSConfig.LocalCIDRPrefix | Out-Null
 
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP `
+                    -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $Config.PublicIP `
                     -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -270,7 +270,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewa
     Write-host ("Building the local network gateway [{0}]..." -f $AzureSimpleConfig.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
+                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -278,13 +278,13 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewa
         Break
     }
 }
-ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
+ElseIf($Local.GatewayIpAddress -ne $Config.PublicIP)
 {
     Try{
-        Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
+        Write-Host ("Updating the local network gateway with ip [{0}]" -f $Config.PublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
         New-AzLocalNetworkGateway -Name $AzureSimpleConfig.LocalGatewayName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
+                -Location $AzureSimpleConfig.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix $VyOSConfig.LocalSubnetPrefix.keys -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -347,7 +347,7 @@ Else{
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
-        $RouterAutomationMode = $false
+        $Configs.RouterConfigs.AutomationMode = $false
     }
 }
 #endregion
@@ -456,7 +456,7 @@ Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinu
 $VyOSFinal | Add-Content "$PSScriptRoot\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
-If($RouterAutomationMode)
+If($Configs.RouterConfigs.AutomationMode)
 {
     $RunManualSteps = $false
     Write-Host "Attempting to automatically configure router's site-2-site vpn settings..." -ForegroundColor Yellow
@@ -577,7 +577,7 @@ If($RunManualSteps)
     Write-Host ("Azure Public IP:     {0}" -f $azpip.IpAddress)
     Write-Host ("Azure Subnet Prefix: {0}" -f $AzureSimpleConfig.VnetSubnetPrefix)
     Write-host ("Shared Key (PSK):    {0}" -f $Global:SharedPSK)
-    Write-host ("Home Public IP:      {0}" -f $HomePublicIP)
+    Write-host ("Home Public IP:      {0}" -f $Config.PublicIP)
     Write-Host ("Router CIDR Prefix:  {0}" -f $VyOSConfig.LocalCIDRPrefix)
 
     #region Copy Paste Mode

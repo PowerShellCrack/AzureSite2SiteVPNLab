@@ -419,7 +419,7 @@ $ScriptName = $LogfileName.replace('.log','.script')
 Remove-Item "$PSScriptRoot\Logs\$ScriptName" -Force -ErrorAction SilentlyContinue | Out-Null
 $VyOSLanCmd | Add-Content "$PSScriptRoot\Logs\$ScriptName" -Force
 
-If($RouterAutomationMode){
+If($Configs.RouterConfigs.AutomationMode){
     Write-Host "Attempting to automatically configure router's lan settings..." -ForegroundColor Yellow
     #region Automation Mode
     $VyOSLanScript = New-VyattaScript -Value $VyOSLanCmd -AsObject -SetReboot

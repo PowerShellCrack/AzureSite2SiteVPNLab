@@ -6,8 +6,6 @@
 /Logs/*
 !/Design/
 /Design/*
-!/builders/
-/builders/*
 !/.ssh/
 /.ssh/*
 !/isos/
@@ -15,7 +13,6 @@
 !/DSC/
 /DSC/*
 hyperv.ps1
-configs.example.ps1
+configs*
 *lab*
 *test*
-config.json

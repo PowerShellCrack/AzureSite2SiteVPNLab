@@ -46,7 +46,7 @@ param(
                 $commandAst,
                 $fakeBoundParameters )
 
-        $Configs = Get-Childitem $_ -Filter configs* | Where Extension -eq '.ps1' | Select -ExpandProperty Name
+        $Configs = Get-Childitem $_ -Filter config* | Where Extension -eq '.json' | Select -ExpandProperty Name
 
         $Configs | Where-Object {
             $_ -like "$wordToComplete*"
@@ -54,7 +54,7 @@ param(
 
     } )]
     [Alias("config")]
-    [string]$ConfigurationFile = "configs.ps1",
+    [string]$ConfigurationFile = "config.json",
 
     [switch]$SkipVYOSSetup
 )
@@ -516,7 +516,7 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigTenantA.LocalGa
     Write-host ("Building the local network gateway [{0}]..." -f $AzureAdvConfigTenantA.LocalGatewayName) -ForegroundColor White -NoNewline
     Try{
         New-AzLocalNetworkGateway -Name $AzureAdvConfigTenantA.LocalGatewayName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
-                -Location $AzureAdvConfigTenantA.LocationName -GatewayIpAddress $HomePublicIP -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) @LNGBGPParams | Out-Null
+                -Location $AzureAdvConfigTenantA.LocationName -GatewayIpAddress $Config.PublicIP -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) @LNGBGPParams | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
     Catch{
@@ -524,13 +524,13 @@ If( -Not($Local = Get-AzLocalNetworkGateway -Name $AzureAdvConfigTenantA.LocalGa
         Break
     }
 }
-ElseIf($Local.GatewayIpAddress -ne $HomePublicIP)
+ElseIf($Local.GatewayIpAddress -ne $Config.PublicIP)
 {
     Try{
-        Write-Host ("Updating the local network gateway with ip [{0}]" -f $HomePublicIP) -ForegroundColor Yellow -NoNewline
+        Write-Host ("Updating the local network gateway with ip [{0}]" -f $Config.PublicIP) -ForegroundColor Yellow -NoNewline
         #Update Local network gratway's connector IP address (onpremise IP)
         New-AzLocalNetworkGateway -Name $AzureAdvConfigTenantA.LocalGatewayName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
-                -Location $AzureAdvConfigTenantA.LocationName -GatewayIpAddress $HomePublicIP `
+                -Location $AzureAdvConfigTenantA.LocationName -GatewayIpAddress $Config.PublicIP `
                 -AddressPrefix @($VyOSConfig.LocalSubnetPrefix.GetEnumerator().Name) @LNGBGPParams -Force | Out-Null
         Write-Host "Done" -ForegroundColor Green
     }
@@ -635,7 +635,7 @@ Else{
         $VyOSConfig['ResetVPNConfigs'] = $true
     }
     Else{
-        $RouterAutomationMode = $false
+        $Configs.RouterConfigs.AutomationMode = $false
     }
 }
 #endregion
@@ -791,7 +791,7 @@ Remove-Item "$ResourcePath\Logs\$ScriptName" -Force -ErrorAction SilentlyContinu
 $VyOSFinal | Add-Content "$ResourcePath\Logs\$ScriptName"
 $VyOSConfig['ResetVPNConfigs'] = $False
 
-If($RouterAutomationMode)
+If($Configs.RouterConfigs.AutomationMode)
 {
     $RunManualSteps = $false
     Write-Host "Attempting to automatically configure router's site-2-site vpn settings for region 1..." -ForegroundColor Yellow
@@ -915,7 +915,7 @@ If($RunManualSteps){
     }
     Write-Host ("Local Router Prefix:      {0}" -f $VyOSConfig.LocalCIDRPrefix)
     Write-Host ("Local Router External:    {0}" -f $VyOSConfig.LocalCIDRPrefix)
-    Write-host ("Home Public IP:           {0}" -f $HomePublicIP)
+    Write-host ("Home Public IP:           {0}" -f $Config.PublicIP)
 
     #region Copy Paste Mode
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow

@@ -1,0 +1,57 @@
+{
+    "LabPrefix": "Contoso",
+    "domain": "contoso.com",
+    "Email": "<email>",
+    "VMAdminUser": "xAdmin",
+    "VMAdminPassword": "<password>",
+
+    "HyperVConfigs": {
+        "HyperVVMLocation": "<default>",
+        "HyperVHDxLocation": "<default>",
+        "HyperVVmIsoPath": "E:\\ISOs\\en-us_windows_10_business_editions_version_20h2_updated_october_2021_x64_dvd_e057173c.iso"
+    },
+
+    "RouterConfigs": {
+        "VyosIsoPath": "<default>",
+        "OnPremSubnetCIDR": "10.100.0.0/16",
+        "OnPremSubnetCount": 2,
+        "DHCPLocation": "router",
+        "DNSServers": [],
+        "AutomationMode": true
+    },
+    
+    "SimpleAppendix": "Simple",
+
+    "TenantAConfigs": {
+        "SiteName": "SiteA",
+        "AzureGov": false,
+        "TimeZone": "Eastern Standard Time",
+        "ResourceLocation": "East US",
+        "HubCIDR": "10.10.0.0/16",
+        "SpokeCIDR": "10.11.0.0/16",
+        "SpokeSubnetCount": 1,
+        "StorageRandomAppendix": "<auto>"
+    },
+
+    "TenantBConfigs": {
+        "SiteName": "SiteB",
+        "AzureGov": false,
+        "TimeZone": "Pacific Standard Time",
+        "ResourceLocation": "West US",
+        "HubCIDR": "10.21.0.0/16",
+        "SpokeCIDR": "10.22.0.0/16",
+        "SpokeSubnetCount": 1,
+        "StorageRandomAppendix": "<auto>"
+    },
+
+    "UseBGP": false,
+    "AzureVnetToVnetPeering": {
+        "TenantASubscriptionID": "<SubscriptionAID>",
+        "TenantATenantID": "<TenantAID>",
+        "TenantBSubscriptionID": "<SubscriptionBID>",
+        "TenantBTenantID": "<TenantBID>"
+    },
+
+    "PublicIP" : "<detect>"
+    
+}
