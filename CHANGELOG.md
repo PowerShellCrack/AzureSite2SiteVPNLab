@@ -3,7 +3,7 @@
 ## 1.5.1 - April 22, 2024
 
 - Changed the variable names for clarity
-- Fixed hub and spoke subnet creation
+- Fixed hub and spoke subnet creation for tenant A
 - Fixed Azure login during context check
 - Added optionC script
 

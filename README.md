@@ -154,6 +154,8 @@ _BETA_: **Step 4C. Build Hyper-V VM.ps1** <-- Sets up a VM in Hyper-V (not unatt
     - Go to Azure Portal --> Local Network Gateways --> Click on new gateway --> Connections
 - VyOS router will remove it trusted ssh host list on each reboot. This is by design and will require login for each script implementation; looking for alternate method to resolve this.
 - There are known issues with the PowerShell ISE interface during VyOS configurations; Recommend running with Powershell console or VScode.
+- Running this script over a LAN network may not work. Copy local before running
+- Hyper-V VM setup script will require PowerSHell 5.1 for Chassis setting configurations
 
 ## Not Supported
 

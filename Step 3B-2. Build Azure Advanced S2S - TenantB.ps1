@@ -194,7 +194,7 @@ If(-Not($SpokeVnet = Get-AzVirtualNetwork -Name $AzureAdvConfigTenantB.VnetSpoke
                             -Location $AzureAdvConfigTenantB.LocationName -AddressPrefix $AzureAdvConfigTenantB.VnetSpokeCIDRPrefix
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigTenantB.VnetSpokeSubnetName -VirtualNetwork $SpokeVnet `
-                -AddressPrefix $AzureAdvConfigTenantB.VnetSpokeSubnetAddressPrefix[0] | Out-Null
+                -AddressPrefix $AzureAdvConfigTenantB.VnetSpokeSubnetAddressPrefix | Out-Null
 
         #Add DNS Server to Vnet
         If($VyOSConfig['InternalDNSIP'].count -gt 0){
@@ -236,7 +236,7 @@ If(-Not($SpokeVnetNsg = Get-AzNetworkSecurityGroup -Name $AzureAdvConfigTenantB.
 
         #We associate the nsg to the subnet
         Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigTenantB.VnetSpokeSubnetName `
-                        -VirtualNetwork $SpokeVnet -AddressPrefix $AzureAdvConfigTenantB.VnetSpokeSubnetAddressPrefix[0] `
+                        -VirtualNetwork $SpokeVnet -AddressPrefix $AzureAdvConfigTenantB.VnetSpokeSubnetAddressPrefix `
                         -NetworkSecurityGroup $SpokeVnetNsg
 
         Write-Host "Done" -ForegroundColor Green
@@ -286,10 +286,10 @@ Else{
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
-If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantB.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName -VirtualNetwork $HubVnet.Name -ErrorAction SilentlyContinue) -or `
+If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantB.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName -VirtualNetwork $HubVnet.Name -ErrorAction SilentlyContinue) -and `
     -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantB.VnetPeerNameBA -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName -VirtualNetwork $SpokeVnet.Name -ErrorAction SilentlyContinue) )
 {
-    Write-Host ("Creating peering between vnets [{0}] and [{1}]..." -f $AzureAdvConfigTenantB.VnetPeerNameAB,$AzureAdvConfigTenantB.VnetPeerNameBA) -ForegroundColor White -NoNewline
+    Write-Host ("Creating Peering between vents [{0}] and [{1}]..." -f $HubVnet.Name,$SpokeVnet.Name) -ForegroundColor White -NoNewline
     Try{
         Add-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantB.VnetPeerNameAB -VirtualNetwork $HubVnet -RemoteVirtualNetworkId $SpokeVnet.Id | Out-Null
         Add-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantB.VnetPeerNameBA -VirtualNetwork $SpokeVnet -RemoteVirtualNetworkId $HubVnet.Id | Out-Null
@@ -318,7 +318,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigTenantB.Publi
     Write-Host ("Creating Azure public IP [{0}]..." -f $AzureAdvConfigTenantB.PublicIPName) -ForegroundColor White -NoNewline
     Try{
         New-AzPublicIpAddress -Name $AzureAdvConfigTenantB.PublicIpName -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName `
-                -Location $AzureAdvConfigTenantB.LocationName -AllocationMethod Dynamic | Out-Null
+                -Location $AzureAdvConfigTenantB.LocationName -AllocationMethod Static | Out-Null
         $azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigTenantB.PublicIpName -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName
         Write-Host "Done" -ForegroundColor Green
     }
@@ -369,7 +369,7 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantB.VnetGatewayNam
         $stopwatch =  [system.diagnostics.stopwatch]::StartNew()
         #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings
         New-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantB.VnetGatewayName -ResourceGroupName $AzureAdvConfigTenantB.ResourceGroupName `
-            -Location $AzureAdvConfigTenantB.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard @VNGBGPParams | Out-Null
+            -Location $AzureAdvConfigTenantB.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1 @VNGBGPParams | Out-Null
         $stopwatch.Stop()
         $totalSecs = [timespan]::fromseconds($stopwatch.Elapsed.TotalSeconds)
         Write-Host ("Completed [{0:hh\:mm\:ss}]" -f $totalSecs) -ForegroundColor Green

@@ -205,7 +205,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpN
     Write-Host ("Creating Azure public IP [{0}]..." -f $AzureSimpleConfig.PublicIpName) -ForegroundColor White -NoNewline
     Try{
         New-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName `
-                        -Location $AzureSimpleConfig.LocationName -AllocationMethod Dynamic | Out-Null
+                        -Location $AzureSimpleConfig.LocationName -AllocationMethod Static | Out-Null
         $azpip = Get-AzPublicIpAddress -Name $AzureSimpleConfig.PublicIpName -ResourceGroupName $AzureSimpleConfig.ResourceGroupName
         Write-Host "Done" -ForegroundColor Green
     }

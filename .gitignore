@@ -6,6 +6,8 @@
 /Logs/*
 !/Design/
 /Design/*
+!/builders/
+/builders/*
 !/.ssh/
 /.ssh/*
 !/isos/

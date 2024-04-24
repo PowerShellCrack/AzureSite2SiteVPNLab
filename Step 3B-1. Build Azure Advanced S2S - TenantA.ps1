@@ -235,12 +235,12 @@ If(-Not($HubVnetNsg = Get-AzNetworkSecurityGroup -Name $AzureAdvConfigTenantA.NS
         $rule1 = New-AzNetworkSecurityRuleConfig -Name 'Allow443Inbound' -Description "Allow 443 traffic in" `
                         -Access Allow -Protocol Tcp -Direction Inbound -Priority 2000 `
                         -SourceAddressPrefix * -SourcePortRange * `
-                        -DestinationAddressPrefix $AzureTenantASpokeCIDR  -DestinationPortRange 443
+                        -DestinationAddressPrefix $AzureAdvConfigTenantA.VnetSpokeCIDRPrefix -DestinationPortRange 443
 
         $rule2 = New-AzNetworkSecurityRuleConfig -Name 'AllowCertAuthInbound' -Description "Allow 49443 traffic in" `
                         -Access Allow -Protocol Tcp -Direction Inbound -Priority 2001 `
                         -SourceAddressPrefix * -SourcePortRange * `
-                        -DestinationAddressPrefix $AzureTenantASpokeCIDR  -DestinationPortRange 49443
+                        -DestinationAddressPrefix $AzureAdvConfigTenantA.VnetSpokeCIDRPrefix -DestinationPortRange 49443
 
         $HubVnetNsg = New-AzNetworkSecurityGroup -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
                         -Location $AzureAdvConfigTenantA.LocationName `
@@ -290,7 +290,7 @@ If(-Not($SpokeVnet = Get-AzVirtualNetwork -Name $AzureAdvConfigTenantA.VnetSpoke
                             -Location $AzureAdvConfigTenantA.LocationName -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeCIDRPrefix
         #Create a subnet configuration for first VM subnet (vnet B)
         Add-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigTenantA.VnetSpokeSubnetName -VirtualNetwork $SpokeVnet `
-                -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix[0] -RouteTable $RouteTable | Out-Null
+                -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix -RouteTable $RouteTable | Out-Null
 
         # Add Additional Subnets
         #Add-AzVirtualNetworkSubnetConfig -Name 'AzureBastionSubnet' -VirtualNetwork $SpokeVnet `
@@ -339,10 +339,9 @@ Finally{
 
 #region 4. Build Peering between vnets
 #https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
-If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VirtualNetwork $HubVnet.Name -ErrorAction SilentlyContinue) -or `
-    -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameBA -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VirtualNetwork $SpokeVnet.Name -ErrorAction SilentlyContinue) )
+If(-Not($SpokeVnetNsg = Get-AzNetworkSecurityGroup -Name $AzureAdvConfigTenantA.NSGSpokeName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue))
 {
-    Write-Host ("Creating Network Security Group [{0}] for spoke subnet [{1}]..." -f $AzureAdvConfigTenantA.NSGSpokeName,$AzureAdvConfigTenantA.VnetSpokeName) -ForegroundColor White -NoNewline
+    Write-Host ("Creating Azure spoke network security group [{0}]..." -f $AzureAdvConfigTenantA.NSGSpokeName) -ForegroundColor White -NoNewline
     Try{
         $rule1 = New-AzNetworkSecurityRuleConfig -Name 'AllowAllOnpremTraffic' -Description "Allow all On-Premise traffic" `
                         -Access Allow -Protocol Tcp -Direction Inbound -Priority 4000 `
@@ -360,8 +359,10 @@ If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameAB
 
         #We associate the nsg to the subnet
         Set-AzVirtualNetworkSubnetConfig -Name $AzureAdvConfigTenantA.VnetSpokeSubnetName `
-                        -VirtualNetwork $SpokeVnet -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix[0] `
+                        -VirtualNetwork $SpokeVnet -AddressPrefix $AzureAdvConfigTenantA.VnetSpokeSubnetAddressPrefix `
                         -NetworkSecurityGroup $SpokeVnetNsg | Out-Null 
+
+        
 
         Write-Host "Done" -ForegroundColor Green
     }
@@ -381,8 +382,51 @@ Else{
 #endregion
 
 
+#region 3. Create Storage account for network troubleshooting
+If(-Not($StorageAccount = Get-AzStorageAccount -Name $AzureAdvConfigTenantA.StorageAccountName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)){
+
+    Write-Host ("Creating Azure storage account [{0}]..." -f $AzureAdvConfigTenantA.StorageAccountName) -ForegroundColor White -NoNewline
+    Try{
+        $StorageAccount = New-AzStorageAccount -Name $AzureAdvConfigTenantA.StorageAccountName `
+                            -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
+                            -SkuName $AzureAdvConfigTenantA.StorageSku `
+                            -Location $AzureAdvConfigTenantA.LocationName -Kind Storage | Out-Null
+
+        #create container
+        [System.Object[]]$currentStorageAccountKeys = Get-AzStorageAccountKey -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -Name $AzureAdvConfigTenantA.StorageAccountName
+        $ctx = New-AzStorageContext -StorageAccountName $AzureAdvConfigTenantA.StorageAccountName -StorageAccountKey $currentStorageAccountKeys.value[0]
+        New-AzStorageContainer -Name 'connection-network-logs' -Context $ctx | Out-Null
+        
+        Write-Host "Done" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+Else{
+    Write-Host ("Using Azure storage account [{0}]" -f $StorageAccount.StorageAccountName) -ForegroundColor Green
+}
+#endregion
 
 
+#region 4. Build Peering between vnets
+#https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview
+If( -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameAB -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VirtualNetwork $HubVnet.Name -ErrorAction SilentlyContinue) -and `
+    -Not(Get-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameBA -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -VirtualNetwork $SpokeVnet.Name -ErrorAction SilentlyContinue) ){
+
+    Write-Host ("Creating Peering between vnets [{0}] and [{1}]..." -f $HubVnet.Name,$SpokeVnet.Name) -ForegroundColor White -NoNewline
+    try {
+        Add-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameAB -VirtualNetwork $HubVnet -RemoteVirtualNetworkId $SpokeVnet.Id -ErrorAction SilentlyContinue
+        Add-AzVirtualNetworkPeering -Name $AzureAdvConfigTenantA.VnetPeerNameBA -VirtualNetwork $SpokeVnet -RemoteVirtualNetworkId $HubVnet.Id -ErrorAction SilentlyContinue
+        Write-Host "Done" -ForegroundColor Green
+    }
+    catch {
+        Write-Host ("Failed: {0}" -f $_.Exception.message) -ForegroundColor Black -BackgroundColor Red
+        Break
+    }
+}
+#endregion
 
 #region 5. Create a Public IP address
 If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigTenantA.PublicIpName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName -ErrorAction SilentlyContinue).IpAddress )
@@ -390,7 +434,7 @@ If( $null -eq ($azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigTenantA.Publi
     Write-Host ("Creating Azure public IP [{0}]..." -f $AzureAdvConfigTenantA.PublicIPName) -ForegroundColor White -NoNewline
     Try{
         New-AzPublicIpAddress -Name $AzureAdvConfigTenantA.PublicIpName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
-                -Location $AzureAdvConfigTenantA.LocationName -AllocationMethod Dynamic | Out-Null
+                -Location $AzureAdvConfigTenantA.LocationName -AllocationMethod Static | Out-Null
         $azpip = Get-AzPublicIpAddress -Name $AzureAdvConfigTenantA.PublicIpName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName
         Write-Host "Done" -ForegroundColor Green
     }
@@ -443,7 +487,7 @@ If( -Not(Get-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantA.VnetGatewayNam
         $stopwatch =  [system.diagnostics.stopwatch]::StartNew()
         #https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings
         New-AzVirtualNetworkGateway -Name $AzureAdvConfigTenantA.VnetGatewayName -ResourceGroupName $AzureAdvConfigTenantA.ResourceGroupName `
-            -Location $AzureAdvConfigTenantA.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku Standard @VNGBGPParams | Out-Null
+            -Location $AzureAdvConfigTenantA.LocationName -IpConfigurations $gwipconfig -GatewayType Vpn -VpnType RouteBased -GatewaySku VpnGw1 @VNGBGPParams | Out-Null
         $stopwatch.Stop()
         $totalSecs = [timespan]::fromseconds($stopwatch.Elapsed.TotalSeconds)
         Write-Host ("Completed [{0:hh\:mm\:ss}]" -f $totalSecs) -ForegroundColor Green

@@ -16,6 +16,8 @@
     & '.\Step 4A-2. Build Hyper-V VM.ps1 -ConfigurationFile configs-gov.ps1
 #>
 param(
+    [Parameter(Mandatory = $true)]
+    $ISOPath,
 
     [Parameter(Mandatory = $false)]
     [ArgumentCompleter( {
@@ -36,9 +38,8 @@ param(
     [Alias("config")]
     [string]$ConfigurationFile = "configs.ps1",
     
-    [ValidatePattern("^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$")]
-    [string]$VMName,
-    [switch]$Autopilot
+    
+    [switch]$SetChassisSettings
 )
 $ErrorActionPreference = "Stop"
 #Requires -RunAsAdministrator
@@ -68,133 +69,210 @@ Else{
 $LogfileName = "$RegionName-HyperVVMSetup-$(Get-Date -Format 'yyyy-MM-dd_Thh-mm-ss-tt').log"
 Try{Start-transcript "$PSScriptRoot\Logs\$LogfileName" -ErrorAction Stop}catch{Start-Transcript "$PSScriptRoot\$LogfileName"}
 
-If(-Not(Test-Path $HyperVSimpleVM.ISOLocation)){Write-Host ("Unable to find ISO: [{0}]. Please update config variable [`$HyperVVmIsoPath] and rerun setup" -f $HyperVSimpleVM.ISOLocation) -ForegroundColor Black -BackgroundColor Red;Break}
-
 #check drive space availability
 $DriveLetter = (Get-Item $HyperVConfig.VirtualHardDiskLocation).PSDrive.Name
+
+
+#Set VM Parameters
+$VMname = Read-Host 'Please enter the name of the VM to be created, [eg. W11VM]'
+if ((Get-VM -Name $VMname -ErrorAction SilentlyContinue).count -ge 1) {
+    Write-Warning ("VM {0} already exists on this system, aborting..." -f $VMname)
+    return
+}Else{
+    Write-Host ("New VM will be named: {0}" -f $VMname) -ForegroundColor Green
+}
+
+$VMCores = Read-Host 'Please enter the amount of cores [1-4]'
+[int64]$VMRAM = 1GB * (read-host "Enter Memory in Gb's [4-12]")
+[int64]$VMDISK = 1GB * (read-host "Enter HDD size in Gb's [40-200]")
+$VMdir = (get-vmhost).VirtualMachinePath + "\" + $VMname
+$VMDiskDir = (get-vmhost).VirtualMachinePath + "\" + $VMname+ "\Virtual Hard Disks"
+#$VMDiskDir = (get-vmhost).VirtualHardDiskPath
+
 $disk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($DriveLetter):'" | Select-Object *
-If($disk.FreeSpace -le $HyperVSimpleVM.HDDSize){
+If($disk.FreeSpace -le $VMDISK){
     Write-Host ("Not enough drive space [{1}GB] on [{0}]" -f $HyperVConfig.VirtualHardDiskLocation,[int]($disk.FreeSpace/1GB).ToString()) -ForegroundColor Black -BackgroundColor Red
     Break
 }
 
-#generate a serial number (for Autopilot)
-$NewSerialNumber = Get-RandomSerialNumber
+Write-Host ("Select ISO...") -ForegroundColor White
+$ISO = Get-Childitem $ISOPath *.ISO | Out-GridView -OutputMode Single -Title 'Please select the ISO from the list and click OK'
+if (($ISO.FullName).Count -ne '1') {
+    Write-Warning ("No ISO selected...")
+}Else{
+    Write-Host ("Using ISO: {0}..." -f $ISO.FullName) -ForegroundColor Green
+}
 
-#region Check VM Name
-$VMs = Get-VM -ErrorAction SilentlyContinue
-If($VMName)
-{
-    If($VMName -in $VMs.Name){
-        Write-Host ("Name already exists. You must specify a different vm name other than [{0}]" -f $VMName) -ForegroundColor Red
-        do {
-            $VMresponse = Read-host "Whats the new VM name?"
-        } until ($VMresponse -match "^(?![0-9]{1,15}$)[a-zA-Z0-9-]{1,15}$" -and $VMresponse -ne $VMName)
-        $VMName = $VMresponse
+Write-Host ("Select Switch...") -ForegroundColor White
+$SwitchName = Get-VMSwitch | Out-GridView -OutputMode Single -Title 'Please select the VM Switch and click OK' | Select-Object Name
+if (($SwitchName.Name).Count -ne '1') {
+    Write-Warning ("No Virtual Switch selected, script aborted...")
+    return
+}Else{
+    Write-Host ("Using Virtual Switch: {0}..." -f $SwitchName.Name) -ForegroundColor Green
+}
+
+#Create VM directory
+If( -NOT(Test-Path -Path $VMdir -ErrorAction SilentlyContinue) ){
+    Write-Host ("Creating Virtual Machine: {0}..." -f $VMname) -ForegroundColor White
+    try {
+        New-Item -ItemType Directory -Path $VMdir -Force:$true -ErrorAction SilentlyContinue | Out-Null
     }
-
-    $computername = $VMName.ToUpper()
-    $newVMname =  $VMName.ToUpper()
-}
-Else{
-    #Increment VM
-    $i=1
-    do {
-        $computername = ($HyperVSimpleVM.ComputerName -replace '\d+$', $i).ToUpper()
-        $newVMname = ($HyperVSimpleVM.ComputerName -replace '\d+$', $i).ToUpper()
-        $i++
-    } until ($newVMname -notin $VMs.Name)
-}
-
-#Update Names in config
-$HyperVSimpleVM['ComputerName'] = $computername
-If($Autopilot){
-    $HyperVSimpleVM['Name'] = $newVMname.ToUpper() + ' (' + $NewSerialNumber + ')'
-}
-Else{
-    $HyperVSimpleVM['Name'] = $newVMname.ToUpper()
-}
-$VHDxFilePath = ($HyperVConfig.VirtualHardDiskLocation + '\'+ $newVMname +'.vhdx')
-
-Write-Host ("Virtual Machine name will be [{0}]" -f $HyperVSimpleVM.Name)  -ForegroundColor Green
-#endregion
-
-#region Build VM
-Write-Host ("Creating VM [{0}]..." -f $HyperVSimpleVM.Name) -ForegroundColor White -NoNewline
-
-Try{
-    If(Get-VHD -Path $VHDxFilePath -ErrorAction SilentlyContinue){
-        Remove-Item $VHDxFilePath -Confirm -Force -ErrorAction Stop
+    catch {
+        Write-Warning ("Couldn't create {0} folder, please check VM Name for illegal characters or permissions on folder..." -f $VMdir)
+        return
     }
-    New-VHD -Path $VHDxFilePath -SizeBytes $HyperVSimpleVM.HDDSize -Dynamic -ErrorAction stop | Out-Null
-}
-Catch{
-    Write-Host ("Unable to create VHD: [{0}]. {1}" -f $VHDxFilePath ,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
-    Break
-}
-
-Try{
-    If($Autopilot){
-        $NetworkSwitchName = Get-VMSwitch -SwitchType External | Select -ExpandProperty Name -First 1
-    }
-    Else{
-        $NetworkSwitchName = $HyperVConfig['VirtualSwitchNetworks'].GetEnumerator() | Select -ExpandProperty Name -First 1
-    }
-
-    New-VM -Name $HyperVSimpleVM.Name -VHDPath $VHDxFilePath  `
-        -SwitchName $NetworkSwitchName -MemoryStartupBytes 1GB -Generation 2 -ErrorAction Stop | Out-Null
-    Set-VM -Name $HyperVSimpleVM.Name -AutomaticCheckpointsEnabled $false -Notes "StartupOrder: $i" `
-        -AutomaticStartAction StartIfRunning -AutomaticStopAction ShutDown -CheckpointType Disabled `
-        -DynamicMemory -ErrorAction Stop | Out-Null
-
-    #Generation 1 Set-VMBios -StartupOrder@("IDE","CD","LegacyNetworkAdapter","Floppy")
-
-    Remove-VMCheckpoint -VMName $HyperVSimpleVM.Name -ErrorAction SilentlyContinue
-    #enable secureboot
-    Set-VMFirmware -VMName $HyperVSimpleVM.Name -EnableSecureBoot On
-    #enable tpm
-    Set-VMKeyProtector -VMName $HyperVSimpleVM.Name -NewLocalKeyProtector
-    Enable-VMTPM -VMName $HyperVSimpleVM.Name
-    #Connect ISO
-    Set-VMDvdDrive -VMName $HyperVSimpleVM.Name -Path $HyperVSimpleVM.ISOLocation -ErrorAction Stop
-    #Get-VMNetworkAdapter -VMName $HyperVSimpleVM.Name | Connect-VMNetworkAdapter -SwitchName $NetworkSwitchName -ErrorAction Stop
-    If($Autopilot){
-        Set-VMAdvancedSettings -VM $HyperVSimpleVM.Name -BaseBoardSerialNumber $NewSerialNumber -BIOSSerialNumber $NewSerialNumber -ChassisSerialNumber $NewSerialNumber
-    }
-}
-Catch{
-    Write-Host ("Unable to build the VM: [{0}]. {1}" -f $HyperVSimpleVM.Name,$_.Exception.Message) -ForegroundColor Black -BackgroundColor Red
-    Break
-}
-Write-Host "Done" -ForegroundColor Green
-#endregion
-
-#region Build local admin credentials for VM
-If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})' -or $VMAdminPassword -match 'password')
-{
-    Write-Host ("You must specify a more complex password other than [{0}]" -f $VMAdminPassword) -ForegroundColor Red
-    $ChangePassword = Read-host "Would you like to set a new password? [Y or N]"
-    If($ChangePassword -eq 'Y'){
-        do {
-            $NewPassword = Read-host "Whats the new password?"
-        } until ($NewPassword -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
-        $HyperVSimpleVM['LocalAdminPassword'] = $NewPassword
-    }
-    Else{
-        Write-Host ("Unable to continue. Change config.ps1 variable [`$VMAdminPassword] value") -ForegroundColor Black -BackgroundColor Red
-        Break
+    finally {
+        if (test-path -Path $VMdir -ErrorAction SilentlyContinue) {
+            Write-Host ("Using {0} as Virtual Machine location..." -f $VMdir) -ForegroundColor Green
+        }
     }
 }
 
 
-Write-Host ("Building [{0}] credentials for VM [{1}]..." -f $HyperVSimpleVM.LocalAdminUser,$HyperVSimpleVM.Name) -ForegroundColor White -NoNewline
-$LocalAdminSecurePassword = ConvertTo-SecureString $HyperVSimpleVM.LocalAdminPassword -AsPlainText -Force
-$Credential = New-Object System.Management.Automation.PSCredential ($HyperVSimpleVM.LocalAdminUser, $LocalAdminSecurePassword)
+#Create VM with the specified values
+try {
+    write-host ("Creating VM: {0}..." -f $VMname) -ForegroundColor White
+    New-VM -Name $VMname `
+        -SwitchName $SwitchName.Name `
+        -Path $VMdir `
+        -Generation 2 `
+        -Confirm:$false `
+        -NewVHDPath "$($VMDiskDir)\$($VMname).vhdx" `
+        -NewVHDSizeBytes ([math]::Round($vmdisk * 1024) / 1KB) `
+        -ErrorAction Stop `
+    | Out-Null
+}
+catch {
+    Write-Warning ("Error creating {0}: {1}..." -f $VMname, $_.Exception.Message)
+    return
+}
+finally {
+    if (Get-VM -Name $VMname -ErrorAction SilentlyContinue | Out-Null) {
+        write-host ("Created {0})..." -f $VMname) -ForegroundColor Green
+    }
+}
+
+#Configure settings on the VM, CPU/Memory/Disk/BootOrder/TPM/Checkpoints
+try {
+    Write-Host ("Configuring settings on {0}..." -f $VMname) -ForegroundColor Green
+
+    #VM Settings
+    Set-VM -name $VMname `
+        -ProcessorCount $VMCores `
+        -StaticMemory `
+        -MemoryStartupBytes $VMRAM `
+        -CheckpointType ProductionOnly `
+        -AutomaticCheckpointsEnabled:$false `
+        -ErrorAction SilentlyContinue `
+    | Out-Null
+
+    #Add Harddisk
+    Add-VMHardDiskDrive -VMName $VMname -Path "$($VMDiskDir)\$($VMname).vhdx" -ControllerType SCSI -ErrorAction SilentlyContinue | Out-Null
+
+    #Add DVD with iso and set it as bootdevice
+    If($ISO.count -eq 1){
+        Add-VMDvdDrive -VMName $VMName -Path $ISO.FullName -Passthru -ErrorAction SilentlyContinue | Out-Null
+        $DVD = Get-VMDvdDrive -VMName $VMname
+    }
+    $VMHD = Get-VMHardDiskDrive -VMName $VMname
+
+    Set-VMFirmware -VMName $VMName -FirstBootDevice $VMHD
+    If($ISO.count -eq 1){
+        Set-VMFirmware -VMName $VMName -FirstBootDevice $DVD
+    }
+    Set-VMFirmware -VMName $VMname -EnableSecureBoot:On
+
+    #Enable TPM
+    Set-VMKeyProtector -VMName $VMname -NewLocalKeyProtector
+    Enable-VMTPM -VMName $VMname
+
+    #Enable all integration services
+    Enable-VMIntegrationService -VMName $VMname -Name 'Guest Service Interface' , 'Heartbeat', 'Key-Value Pair Exchange', 'Shutdown', 'Time Synchronization', 'VSS'
+}
+catch {
+    Write-Warning ("Error setting VM parameters, check settings of VM {0} ..." -f $VMname)
+    return
+}
+
+
+
+If($SetChassisSettings){
+    #$CurrentSerial = Get-VMSettings -VMName $VM.Name | Select-Object -ExpandProperty BIOSSerialNumber
+    #$CurrentAssetTag = Get-VMSettings -VMName $VM.Name | Select-Object -ExpandProperty ChassisAssetTag
+
+    do{    
+        Write-Host "What would you like the serial to be for: $($VMName):"
+        $SerialResponse = Read-Host "Options are: ([D]ellLike, [R]andom, [C]ustom, [A]fterDashInName, [G]uid, [H]yper-V number)?"
+        switch ($SerialResponse.ToUpper()) {
+            'D' {
+                $SerialNumber = (Get-RandomSerialNumber -DellLike)
+                $AssetTag = (Get-RandomAssetTag)
+            }
+            'R' {
+                $SerialNumber = 'HVM' + (Get-RandomSerialNumber)
+                $AssetTag = (Get-RandomAssetTag)
+            }
+            'C' {
+                $SerialNumber = Read-Host "Enter the Serial Number for $($VMName)"
+                $AssetTag = Read-Host "Enter the AssetTag for $($VMName)"
+            }
+            'A' {
+                $SerialNumber = $VMName.Split('-')[-1]
+                $AssetTag = (Get-RandomAssetTag)
+            }
+            'G' {
+                $SerialNumber = [System.Guid]::NewGuid().ToString()
+                $AssetTag = [System.Guid]::NewGuid().ToString()
+            }
+            'H' {
+                #random number between 1000 and 9999 5 time and then set two random numbers
+                $NumberSet = @()
+                For ($i = 0; $i -lt 6) {
+                    $NumberSet += (Get-Random -Minimum 1000 -Maximum 9999)
+                    $i++
+                }
+                $NumberSet += (Get-Random -Minimum 10 -Maximum 99)
+                $NumberSet = $NumberSet -join '-'
+                
+                $SerialNumber = $NumberSet
+                $AssetTag = $NumberSet
+            }
+            default {
+                Write-Host ("Invalid input, please enter D, R, C, A, G, or H...") -ForegroundColor Red
+            }
+        }
+    } Until($SerialResponse -match 'D|R|C|A|G|H')
+
+
+    Set-VMSettings -VMName $VMname -SerialNumber $SerialNumber
+    Set-VMSettings -VMName $VMname -AssetTag $AssetTag
+}
+
 Write-Host "Done" -ForegroundColor Green
 #endregion
 
 #region Add unattend file to hyper-v guest harddrive
-If($HyperVSimpleVM.Unattended){
+#NOT WORKING YET
+If($Unattended){
+    #region Build local admin credentials for VM
+    If($VMAdminPassword -notmatch '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})' -or $VMAdminPassword -match 'password')
+    {
+        Write-Host ("You must specify a more complex password other than [{0}]" -f $VMAdminPassword) -ForegroundColor Red
+        $ChangePassword = Read-host "Would you like to set a new password? [Y or N]"
+        If($ChangePassword -eq 'Y'){
+            do {
+                $NewPassword = Read-host "Whats the new password?"
+            } until ($NewPassword -match '((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%&*()]).{8,123})')
+            #DO ACTION
+            
+        }
+        Else{
+            Write-Host ("Unable to continue. Change config.ps1 variable [`$VMAdminPassword] value") -ForegroundColor Black -BackgroundColor Red
+            Break
+        }
+    }
+
     #Mount vhd
 
     #copy Autounattend.xml to vhdx root
@@ -206,25 +284,24 @@ If($HyperVSimpleVM.Unattended){
 #endregion
 
 
-#grab VM's current IP
-$CurrentIPaddress = Get-VM -Name $HyperVSimpleVM.Name | Select -ExpandProperty Networkadapters | Select -ExpandProperty IPAddresses
 
 #region grab hyper-v vm serialnumbers
 If($Autopilot){
+    #grab VM's current IP
+    $CurrentIPaddress = Get-VM -Name $VMName | Select -ExpandProperty Networkadapters | Select -ExpandProperty IPAddresses
+
+
     $HyperVMInfo = Get-WmiObject -ComputerName 'localhost' -Namespace root\virtualization\v2 -class Msvm_VirtualSystemSettingData |
             Where InstanceID -match "(:)(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}$" |
             select * elementname, InstanceID, BIOSSerialNumber,SecureBootEnabled,ChassisAssetTag
 
-
-
-
     #run commands within VM
     #https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/powershell-direct
-    $s = New-PSSession -VMName $HyperVSimpleVM.Name -Credential $Credential
+    $s = New-PSSession -VMName $VMName -Credential $Credential
 
     #Copy-Item -FromSession $s -Path C:\guest_path\data.txt -Destination C:\host_path\
-    Invoke-Command -VMName $HyperVSimpleVM.Name -ScriptBlock { Install-script Get-WindowsAutopilotInfo -Force }
-    Invoke-Command -VMName $HyperVSimpleVM.Name -ScriptBlock { Get-WindowsAutopilotInfo.ps1 -OutputFile C:\$NewSerialNumber.csv  }
+    Invoke-Command -VMName $VMName -ScriptBlock { Install-script Get-WindowsAutopilotInfo -Force }
+    Invoke-Command -VMName $VMName -ScriptBlock { Get-WindowsAutopilotInfo.ps1 -OutputFile C:\$NewSerialNumber.csv  }
     Move-Item -FromSession $s -Path C:\$NewSerialNumber.csv -Destination C:\host_path\
     Remove-PSSession $s
 }
