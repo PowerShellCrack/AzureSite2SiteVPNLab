@@ -370,7 +370,7 @@ If(!$NoVyosISOCheck){
 #============================================
 # CONFIGURATIONS
 #============================================
-Write-Host "Collectiing local data..." -NoNewline
+Write-Host "Collecting local data..." -NoNewline
 #region Hyper-V Configurations
 #------------------------------
 $HyperVConfig = @{

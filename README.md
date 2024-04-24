@@ -37,6 +37,45 @@ You can then use this network setup to build your environment. Here is an exampl
 - Azure PowerShell Modules installed (specifically  **Az.Accounts, Az.Resources ,Az.Network, Az.Storage, Az.Compute**)
 - Partial knowledge with PowerShell and Azure modules
 
+
+## Configurations
+
+Below are explanations for each configuration. 
+
+- **IgnoreISECheck**: PowerShell ISE has issues with prompting for password during VYOS setup. Recommend running in PowerShell or VSCode.
+- **AzureGov**: changing to true, will use the Azure environment for gov
+- **LabPrefix**: identifier for names in lab
+- **domain**: just a name for now (no DC install....yet)
+- **Email**: used only in VM notification for VM auto shutdown settings
+- **VMAdminUser**: this is used to configure default username and password on Azure VM's
+- **VMAdminPassword**: this is used to configure default username and password on Azure VM's
+- **OnPremSubnetCIDR**: Always use /16
+- **OnPremSubnetCount**: 
+- **TenantASiteName**: 
+- **TenantAHubCIDR**: Always use /16
+- **TenantASpokeCIDR**: Always use /16; keep this subnet higher than hub (when incrementing)
+- **TenantASpokeSubnetCount**: keep this at 1 for now
+- **TenantBSiteName**: 
+- **TenantBHubCIDR**: Always use /16
+- **TenantBSpokeCIDR**: Always use /16
+- **TenantBSpokeSubnetCount**: keep this at 1 for now
+- **DHCPLocation**: defaults to DHCP server not on router; assumes DHCP is on a server
+- **DNSServers**: if not specified; defaults to fourth IP in spoke subnet scope (eg. 10.22.1.4). This would be Azure's first available IP for VM if <router> is specified; google IP 8.8.8.8 will be used since no DNS server role exist on router
+- **HyperVVMLocation**: Leave as <default> for auto detect
+- **HyperVHDxLocation**: Leave as <default> for auto detect
+- **VyosIsoPath**: Add path (eg. 'E:\\ISOs\\VyOS-1.1.8-amd64.iso') or use <latest> to get the latest VyOS ISO (this is still in BETA)
+- **HyperVVmIsoPath**: 
+- **UseBGP**: not required for VPN, but can help. Costs more.
+- **AzureVnetToVnetPeering**: 
+    - TenantASubscriptionID: 
+    - TenantATenantID: 
+    - TenantBSubscriptionID: 
+    - TenantBTenantID: 
+- **RouterAutomationMode**: Uses Git, SSH and SCP to build VyOS router. 99% automated; but 90% successful
+- **SimpleAppendix**: Name appended to the simple S2S resources
+- **AzureLocation**: Azure location: supports East US, East US 2, West US, West US 2, Central US, North Central US, South Central US
+- **timeZone**: 
+
 ## Scripts
 
 - **configs.ps1**. <-- This script is used to answer script values; linked to all scripts
